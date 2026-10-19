@@ -12,44 +12,30 @@ the notes of the version's GitHub Release.
 
 ### Added
 
-- A working example of scene triggers, scene actions and dashboard widgets
-  (Gladys 5.1.0 or later).
-- `CHANGELOG.md`, rolled by the Release workflow.
-- A GitHub Release for every version, with its changelog section as notes: the
-  Gladys Supervision page links each version to the repository's releases.
-- CI runs the tests on Node 22 and 24, and builds the Docker image.
-- Dependabot keeps the npm dependencies and the GitHub Actions up to date.
-- `SECURITY.md` (how to report a vulnerability) and `CLAUDE.md` (project rules
-  for contributors and coding assistants).
-- Manifest tests: `version` matches `package.json`, `docker_image` is tagged
-  with it, descriptions hold 10 to 100 characters, placeholders are
-  multi-language objects.
-- The latitude and longitude fields show an example value as placeholder.
+- Mitsubishi Heavy Industries air conditioners with the WF-RAC Wi-Fi adapter,
+  over the local API of the adapter (port 51443, plain HTTP or HTTPS found on
+  its own): one device per adapter, up to 8, with on/off, mode, setpoint (bounded to
+  the range of the unit for its mode), fan speed, vertical vane, indoor and
+  outdoor temperatures and the error code of the unit. Never tested with a
+  real device.
+- Commands off by default ("Allow the commands"). With them allowed, Gladys
+  registers one identifier, kept in `/data`, on each adapter (four slots):
+  once, then at most once an hour after a refusal; never when the identifier
+  cannot be kept; never again on a full table without the "Register Gladys on
+  the adapters" button.
+- Each command reads the unit again and is decided on that read, leaves
+  within 3.5 s of the click or is refused unsent, checks the option again
+  right before sending, and is never retried; a command that may have been
+  received is answered "sent, without confirmation" and the unit is read
+  again after 5 and 20 s. One command at a time per adapter, one request at a
+  time to it, 1 s apart.
+- Reads every 60 s (30 s to 10 min); failures retried after 30 s, 1, 2 then
+  5 min, never sooner than the interval; HTTP 429 pauses bounded to 1 min –
+  6 h, kept in `/data`, for every path.
+- "Test the connection" button; status, Discovery list, states and badges
+  published again after a reconnection to Gladys; a device published again
+  keeps every feature already created.
+- Docs (French, English), cover, `THIRD_PARTY_NOTICES.md` (pywfrac and the Home
+  Assistant integration, MIT), shipped in the image with `LICENSE`.
 
-### Changed
-
-- Node.js 22 or later is required (Node 20 is end-of-life).
-- Integration SDK 0.15.0. The tests now run against the fake Gladys of the
-  SDK, which refuses the payloads Gladys refuses.
-- The refresh interval is one minute minimum, the fastest Gladys polls a
-  device. The plug's power is only sent when it changes, and every 30
-  minutes otherwise.
-
-### Fixed
-
-- Gladys refused the devices of the Discovery tab: the weather station and
-  the plug declared their poll frequency in seconds instead of one of the
-  values Gladys accepts, and were never polled. They now poll every minute,
-  and the readings follow the refresh interval of the configuration.
-
-- The release commit no longer fails `npm run format:check`: the Release
-  workflow updates the manifest `version` and `docker_image` in place instead
-  of re-printing the whole file with `jq`.
-- The integration can write to `/data`: the image creates the directory owned
-  by the `node` user, a new Docker volume was owned by root.
-- A sub-container running the integration's own image follows it to the new
-  tag at each release, as well as in the manifest of the build summary: it kept
-  the previous tag, which may not exist on the registry. Sub-containers on a
-  third-party image (a broker, a database...) keep theirs.
-
-[Unreleased]: https://github.com/GladysAssistant/integration-template-js/commits/main
+[Unreleased]: https://github.com/LM1LC3N7/gladys-mitsubishi-wfrac/commits/main

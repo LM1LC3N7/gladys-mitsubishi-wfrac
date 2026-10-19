@@ -1,0 +1,236 @@
+{
+  "frames": {
+    "off": {
+      "commands": {
+        "fan_auto": "AACqj6r/AAAIAAAUigAAAAAAAf////9hpwEACAcq/wAACAAABIAAAAAAAAH/////FjI=",
+        "fan_high": "AACqjqr/AAAIAAAUigAAAAAAAf/////SkgEACAYq/wAACAAABIAAAAAAAAH/////pQc=",
+        "mode_auto": "AACij6r/AAAIAAAUigAAAAAAAf////8XaAEAAAcq/wAACAAABIAAAAAAAAH/////YP0=",
+        "mode_heat": "AACyj6r/AAAIAAAUigAAAAAAAf/////a5gEAEAcq/wAACAAABIAAAAAAAAH/////rXM=",
+        "power_off": "AACqj6r/AAAIAAAUigAAAAAAAf////9hpwEACAcq/wAACAAABIAAAAAAAAH/////FjI=",
+        "power_on": "AACrj6r/AAAIAAAUigAAAAAAAf////+XcgEACQcq/wAACAAABIAAAAAAAAH/////4Oc=",
+        "setpoint_22_5": "AACqj63/AAAIAAAUigAAAAAAAf////9+nQEACAct/wAACAAABIAAAAAAAAH/////CQg=",
+        "swing_ud_3": "AACqr6r/AAAIAAAUigAAAAAAAf/////HcQEACCcq/wAACAAABIAAAAAAAAH/////sOQ=",
+        "swing_ud_auto": "AADqj6r/AAAIAAAUigAAAAAAAf////8XvAEASAcq/wAACAAABIAAAAAAAAH/////YCk="
+      },
+      "fields": {
+        "airFlow": 0,
+        "compressorRunning": false,
+        "coolHotJudge": false,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 23.5,
+        "mode": 1,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": false,
+        "outdoorTemp": 29.0,
+        "presetTemp": 21.0,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 5,
+        "windUD": 1
+      },
+      "payload": "AACqj6r/AAAIAAAUigAAAAAAAf////9hp4EECAcqmgAAiAAABAAAAAAAAAOAIJn/gBDP/5QQAAAOQQ=="
+    },
+    "on_auto": {
+      "commands": {
+        "fan_auto": "AACjj6n/AAAAAAAUigAAAAAAAf////+k6AEAAQcp/wAAAAAABIAAAAAAAAH/////030=",
+        "fan_high": "AACjjqn/AAAAAAAUigAAAAAAAf////8X3QEAAQYp/wAAAAAABIAAAAAAAAH/////YEg=",
+        "mode_auto": "AACjj6n/AAAAAAAUigAAAAAAAf////+k6AEAAQcp/wAAAAAABIAAAAAAAAH/////030=",
+        "mode_heat": "AACzj6n/AAAAAAAUigAAAAAAAf////9pZgEAEQcp/wAAAAAABIAAAAAAAAH/////HvM=",
+        "power_off": "AACij6n/AAAAAAAUigAAAAAAAf////9SPQEAAAcp/wAAAAAABIAAAAAAAAH/////Jag=",
+        "power_on": "AACjj6n/AAAAAAAUigAAAAAAAf////+k6AEAAQcp/wAAAAAABIAAAAAAAAH/////030=",
+        "setpoint_22_5": "AACjj63/AAAAAAAUigAAAAAAAf////+7oAEAAQct/wAAAAAABIAAAAAAAAH/////zDU=",
+        "swing_ud_3": "AACjr6n/AAAAAAAUigAAAAAAAf////8CPgEAAScp/wAAAAAABIAAAAAAAAH/////das=",
+        "swing_ud_auto": "AADjj6n/AAAAAAAUigAAAAAAAf/////S8wEAQQcp/wAAAAAABIAAAAAAAAH/////pWY="
+      },
+      "fields": {
+        "airFlow": 0,
+        "compressorRunning": false,
+        "coolHotJudge": true,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 24.5,
+        "mode": 0,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": true,
+        "outdoorTemp": 29.7,
+        "presetTemp": 20.5,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 5,
+        "windUD": 1
+      },
+      "payload": "AACjj6n/AAAAAAAUigAAAAAAAf////+k6IEEAQcpnQAAgQAABAAAAAAAAAOAIJ3/gBDS/5QQAABLtw=="
+    },
+    "on_cool": {
+      "commands": {
+        "fan_auto": "AACrj7T/AAAIAAAUigAAAAAAAf/////0NgEACQc0/wAACAAABIAAAAAAAAH/////g6M=",
+        "fan_high": "AACrjrT/AAAIAAAUigAAAAAAAf////9HAwEACQY0/wAACAAABIAAAAAAAAH/////MJY=",
+        "mode_auto": "AACjj7T/AAAIAAAUigAAAAAAAf////+C+QEAAQc0/wAACAAABIAAAAAAAAH/////9Ww=",
+        "mode_heat": "AACzj7T/AAAIAAAUigAAAAAAAf////9PdwEAEQc0/wAACAAABIAAAAAAAAH/////OOI=",
+        "power_off": "AACqj7T/AAAIAAAUigAAAAAAAf////8C4wEACAc0/wAACAAABIAAAAAAAAH/////dXY=",
+        "power_on": "AACrj7T/AAAIAAAUigAAAAAAAf/////0NgEACQc0/wAACAAABIAAAAAAAAH/////g6M=",
+        "setpoint_22_5": "AACrj63/AAAIAAAUigAAAAAAAf////+ISAEACQct/wAACAAABIAAAAAAAAH//////90=",
+        "swing_ud_3": "AACrr7T/AAAIAAAUigAAAAAAAf////9S4AEACSc0/wAACAAABIAAAAAAAAH/////JXU=",
+        "swing_ud_auto": "AADrj7T/AAAIAAAUigAAAAAAAf////+CLQEASQc0/wAACAAABIAAAAAAAAH/////9bg="
+      },
+      "fields": {
+        "airFlow": 0,
+        "compressorRunning": false,
+        "coolHotJudge": false,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 24.0,
+        "mode": 1,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": true,
+        "outdoorTemp": 30.0,
+        "presetTemp": 26.0,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 5,
+        "windUD": 1
+      },
+      "payload": "AACrj7T/AAAIAAAUigAAAAAAAf/////0NoEECQc0mwAAiAAABAAAAAAAAAOAIJv/gBDT/5QQAAD4rQ=="
+    },
+    "on_cool_fanspeed4": {
+      "commands": {
+        "fan_auto": "AACrj67/AAAIAAAQigAAAAAAAf////9cNwEACQcu/wAACAAAAIAAAAAAAAH/////K6I=",
+        "fan_high": "AACrjq7/AAAIAAAQigAAAAAAAf/////vAgEACQYu/wAACAAAAIAAAAAAAAH/////mJc=",
+        "mode_auto": "AACjjq7/AAAIAAAQigAAAAAAAf////+ZzQEAAQYu/wAACAAAAIAAAAAAAAH/////7lg=",
+        "mode_heat": "AACzjq7/AAAIAAAQigAAAAAAAf////9UQwEAEQYu/wAACAAAAIAAAAAAAAH/////I9Y=",
+        "power_off": "AACqjq7/AAAIAAAQigAAAAAAAf////8Z1wEACAYu/wAACAAAAIAAAAAAAAH/////bkI=",
+        "power_on": "AACrjq7/AAAIAAAQigAAAAAAAf/////vAgEACQYu/wAACAAAAIAAAAAAAAH/////mJc=",
+        "setpoint_22_5": "AACrjq3/AAAIAAAQigAAAAAAAf/////vcAEACQYt/wAACAAAAIAAAAAAAAH/////mOU=",
+        "swing_ud_3": "AACrrq7/AAAIAAAQigAAAAAAAf////9J1AEACSYu/wAACAAAAIAAAAAAAAH/////PkE=",
+        "swing_ud_auto": "AADrjq7/AAAIAAAQigAAAAAAAf////+ZGQEASQYu/wAACAAAAIAAAAAAAAH/////7ow="
+      },
+      "fields": {
+        "airFlow": 4,
+        "compressorRunning": true,
+        "coolHotJudge": false,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 23.7,
+        "mode": 1,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": true,
+        "outdoorTemp": 29.0,
+        "presetTemp": 23.0,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 1,
+        "windUD": 1
+      },
+      "payload": "AACrjq7/AAAIAAAQigAAAAAAAf/////vAoEECQYumgAQiAIAAAAAAAAAAAOAIJr/gBDP/5QQAABWyA=="
+    },
+    "on_dry": {
+      "commands": {
+        "fan_auto": "AACnj6n/AAAIAAAUigAAAAAAAf////9aqAEABQcp/wAACAAABIAAAAAAAAH/////LT0=",
+        "fan_high": "AACnjqn/AAAIAAAUigAAAAAAAf/////pnQEABQYp/wAACAAABIAAAAAAAAH/////ngg=",
+        "mode_auto": "AACjj6n/AAAIAAAUigAAAAAAAf/////hzwEAAQcp/wAACAAABIAAAAAAAAH/////llo=",
+        "mode_heat": "AACzj6n/AAAIAAAUigAAAAAAAf////8sQQEAEQcp/wAACAAABIAAAAAAAAH/////W9Q=",
+        "power_off": "AACmj6n/AAAIAAAUigAAAAAAAf////+sfQEABAcp/wAACAAABIAAAAAAAAH/////2+g=",
+        "power_on": "AACnj6n/AAAIAAAUigAAAAAAAf////9aqAEABQcp/wAACAAABIAAAAAAAAH/////LT0=",
+        "setpoint_22_5": "AACnj63/AAAIAAAUigAAAAAAAf////9F4AEABQct/wAACAAABIAAAAAAAAH/////MnU=",
+        "swing_ud_3": "AACnr6n/AAAIAAAUigAAAAAAAf/////8fgEABScp/wAACAAABIAAAAAAAAH/////i+s=",
+        "swing_ud_auto": "AADnj6n/AAAIAAAUigAAAAAAAf////8sswEARQcp/wAACAAABIAAAAAAAAH/////WyY="
+      },
+      "fields": {
+        "airFlow": 0,
+        "compressorRunning": false,
+        "coolHotJudge": false,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 24.2,
+        "mode": 4,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": true,
+        "outdoorTemp": 29.7,
+        "presetTemp": 20.5,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 5,
+        "windUD": 1
+      },
+      "payload": "AACnj6n/AAAIAAAUigAAAAAAAf////9aqIEEBQcpnAAQiAAABAAAAAAAAAOAIJz/gBDS/5QQAABUYQ=="
+    },
+    "on_fan_only": {
+      "commands": {
+        "fan_auto": "AACvj6r/AAAIAAAUigAAAAAAAf////8sFQEADQcq/wAACAAABIAAAAAAAAH/////W4A=",
+        "fan_high": "AACvjqr/AAAIAAAUigAAAAAAAf////+fIAEADQYq/wAACAAABIAAAAAAAAH/////6LU=",
+        "mode_auto": "AACjj6r/AAAIAAAUigAAAAAAAf/////hvQEAAQcq/wAACAAABIAAAAAAAAH/////lig=",
+        "mode_heat": "AACzj6r/AAAIAAAUigAAAAAAAf////8sMwEAEQcq/wAACAAABIAAAAAAAAH/////W6Y=",
+        "power_off": "AACuj6r/AAAIAAAUigAAAAAAAf/////awAEADAcq/wAACAAABIAAAAAAAAH/////rVU=",
+        "power_on": "AACvj6r/AAAIAAAUigAAAAAAAf////8sFQEADQcq/wAACAAABIAAAAAAAAH/////W4A=",
+        "setpoint_22_5": "AACvj63/AAAIAAAUigAAAAAAAf////8zLwEADQct/wAACAAABIAAAAAAAAH/////RLo=",
+        "swing_ud_3": "AACvr6r/AAAIAAAUigAAAAAAAf////+KwwEADScq/wAACAAABIAAAAAAAAH//////VY=",
+        "swing_ud_auto": "AADvj6r/AAAIAAAUigAAAAAAAf////9aDgEATQcq/wAACAAABIAAAAAAAAH/////LZs="
+      },
+      "fields": {
+        "airFlow": 0,
+        "compressorRunning": false,
+        "coolHotJudge": false,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 23.7,
+        "mode": 3,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": true,
+        "outdoorTemp": 30.0,
+        "presetTemp": 21.0,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 5,
+        "windUD": 1
+      },
+      "payload": "AACvj6r/AAAIAAAUigAAAAAAAf////8sFYEEDQcqmgAAiAAABAAAAAAAAAOAIJr/gBDT/5QQAABZ2w=="
+    },
+    "on_heat": {
+      "commands": {
+        "fan_auto": "AACzj6r/AAAAAAAUigAAAAAAAf////9pFAEAEQcq/wAAAAAABIAAAAAAAAH/////HoE=",
+        "fan_high": "AACzjqr/AAAAAAAUigAAAAAAAf/////aIQEAEQYq/wAAAAAABIAAAAAAAAH/////rbQ=",
+        "mode_auto": "AACjj6r/AAAAAAAUigAAAAAAAf////+kmgEAAQcq/wAAAAAABIAAAAAAAAH/////0w8=",
+        "mode_heat": "AACzj6r/AAAAAAAUigAAAAAAAf////9pFAEAEQcq/wAAAAAABIAAAAAAAAH/////HoE=",
+        "power_off": "AACyj6r/AAAAAAAUigAAAAAAAf////+fwQEAEAcq/wAAAAAABIAAAAAAAAH/////6FQ=",
+        "power_on": "AACzj6r/AAAAAAAUigAAAAAAAf////9pFAEAEQcq/wAAAAAABIAAAAAAAAH/////HoE=",
+        "setpoint_22_5": "AACzj63/AAAAAAAUigAAAAAAAf////92LgEAEQct/wAAAAAABIAAAAAAAAH/////Abs=",
+        "swing_ud_3": "AACzr6r/AAAAAAAUigAAAAAAAf/////PwgEAEScq/wAAAAAABIAAAAAAAAH/////uFc=",
+        "swing_ud_auto": "AADzj6r/AAAAAAAUigAAAAAAAf////8fDwEAUQcq/wAAAAAABIAAAAAAAAH/////aJo="
+      },
+      "fields": {
+        "airFlow": 0,
+        "compressorRunning": false,
+        "coolHotJudge": true,
+        "electric": 0.0,
+        "entrust": false,
+        "errorCode": "00",
+        "indoorTemp": 23.7,
+        "mode": 2,
+        "modelNr": 1,
+        "modelNrRaw": 1,
+        "operation": true,
+        "outdoorTemp": 30.0,
+        "presetTemp": 21.0,
+        "selfClean": false,
+        "vacant": false,
+        "windLR": 5,
+        "windUD": 1
+      },
+      "payload": "AACzj6r/AAAIAAAUigAAAAAAAf////8sM4EEEQcqmgAAgQAABAAAAAAAAAOAIJr/gBDT/5QQAACzfA=="
+    }
+  },
+  "source": "pywfrac 0.1.10 parser.py (MIT), tests/live_captures.py"
+}

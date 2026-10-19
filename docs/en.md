@@ -1,61 +1,129 @@
-# Demo Devices Template
+# Mitsubishi Heavy Industries WF-RAC
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+This integration shows in Gladys the **Mitsubishi Heavy Industries** (MHI)
+air conditioners fitted with the **WF-RAC** Wi-Fi adapter (the one of the
+Smart M-Air app), through the local API of the adapter, without any cloud.
+
+> **Never tested with a real device.** The protocol of the adapter is not
+> documented by the manufacturer: the integration follows pywfrac and its Home
+> Assistant integration, and was only tried against simulated answers (built
+> from real frames those projects published). Your feedback is welcome.
+
+Unofficial, not affiliated with Mitsubishi Heavy Industries.
+
+**Not for Mitsubishi Electric**: Mitsubishi Electric air conditioners
+(MELCloud) are handled by the MELCloud integration of the Gladys core.
 
 ## What you get
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+One device per adapter (one per indoor unit), with:
 
-## Configuration
+| Feature                                              | Gladys type                      | Command |
+| ---------------------------------------------------- | -------------------------------- | ------- |
+| On/off                                               | air conditioning, on/off         | yes     |
+| Mode (automatic, cooling, heating, drying, fan only) | air conditioning, mode           | yes     |
+| Setpoint (0.5 °C steps)                              | air conditioning, setpoint (°C)  | yes     |
+| Fan speed (automatic, 1 to 4)                        | air conditioning, fan speed      | yes     |
+| Vertical vane (swing, positions 1 to 4)              | air conditioning, vertical swing | yes     |
+| Indoor temperature                                   | temperature sensor (°C)          | no      |
+| Outdoor temperature                                  | temperature sensor (°C)          | no      |
+| Error code of the unit                               | text                             | no      |
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+The setpoint is held to the range of the unit for the mode read just before:
+16 to 30 °C in cooling, 18 to 30 °C otherwise; ZT models (2025) go from 10 °C
+in heating up to 33 °C in cooling and drying. A value out of range is refused,
+never sent.
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+## Setup
 
-## Actions
+1. Give each adapter a **fixed IP address** in your router (it often shows
+   under a name made of its MAC address).
+2. In the configuration of the integration, enter the addresses, separated by
+   commas (8 at most). The port is 51443; the integration finds on its own
+   whether the adapter speaks HTTP or HTTPS.
+3. Save, then add the air conditioners from the **Discovery** tab.
+4. To control them from Gladys, turn on **Allow the commands**.
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+Each adapter is read every 60 seconds (30 s to 10 min), one request at a
+time, one second apart at least: the adapter takes one connection at a time.
 
-## Scenes
+## Commands and the registration on the adapter
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
+Reading the state needs nothing. **Writing** needs Gladys to be registered on
+the adapter, which has only **four slots** (the Smart M-Air app of each phone
+takes one) and frees none on its own. Hence:
 
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
+- commands are **off by default**: without the option, nothing is registered
+  on the adapter;
+- Gladys uses **one identifier** for the whole installation, kept in its
+  `/data` folder; if it cannot be kept there, Gladys does not register at all
+  (each restart would take another slot);
+- it registers **once** per adapter; after a refusal it tries again at most
+  once an hour, never in a loop;
+- when the four slots are taken it no longer tries on its own: the status
+  says so. Remove an app or a phone in Smart M-Air, then click **Register
+  Gladys on the adapters**.
 
-## Dashboard
+Each command:
 
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
+- reads the state of the air conditioner again just before, and is decided on
+  that read only (the adapter receives a full state: a frame built on an old
+  state would undo what changed since);
+- leaves within 3.5 seconds of the click, or is refused without being sent
+  ("too slowly: not sent") when the adapter is slow to answer;
+- checks the "Allow the commands" option on arrival and right before sending;
+- is never sent again on its own. When the adapter does not answer after
+  sending, the message is "Command sent, without confirmation": check the
+  state a few seconds later (Gladys reads the unit again after 5 and 20
+  seconds);
+- is not sent when the air conditioner already is in the asked state.
 
-## Troubleshooting
+One command at a time per air conditioner: a second one, while a first one
+is running, is refused.
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+**60-second lock.** After each write, the adapter keeps writing to its author
+for one minute. A command sent less than a minute after the Smart M-Air app
+was used is refused ("try again in a minute"); Gladys neither waits nor tries
+again.
+
+**On/off and "turn everything off".** As with MELCloud, on/off is an
+air-conditioning feature: a scene or a voice assistant that "turns everything
+off" may switch the air conditioner off.
+
+Changing the mode does not switch on an air conditioner that is off: only the
+mode changes.
+
+## Known limits
+
+- No horizontal vane, 3D auto, self-clean, Home Leave mode, external room
+  temperature, operation data nor energy in this version.
+- On some units (old bus signature), the adapter does not report the
+  horizontal vane position nor 3D auto: like the app and pywfrac, each command
+  then sets them back to automatic / off.
+- When the adapter is slow to answer (more than 2 to 3 seconds), commands are
+  refused without being sent. Try again; tell us if it happens often.
+- One Gladys installation per adapter is expected.
+
+## Security
+
+The local API has **no password**: any device of the local network can read
+and, once registered, control the air conditioner. Keep the adapters on a
+**trusted network** (a guest network or a dedicated VLAN is a good idea).
+
+Depending on its firmware, the adapter speaks HTTP or HTTPS. Over HTTPS its
+certificate is self-signed and its TLS stack very old: the integration does
+not check the certificate and accepts the old TLS versions, as pywfrac does.
+This does not protect against a device impersonating the adapter on your
+network.
+
+The identifier of Gladys (operator and device) is kept in `/data`, never
+written to the logs, and sent to the adapters only.
+
+## Credits
+
+The protocol is ported to JavaScript from
+[pywfrac](https://github.com/blues-sechseck/pywfrac) 0.1.10 and the Home
+Assistant integration
+[Mitsubishi-WF-RAC-Integration](https://github.com/blues-sechseck/Mitsubishi-WF-RAC-Integration)
+(jeatheak, blues-sechseck, MIT license), whose reference of the WF-RAC module
+guided this work. See `THIRD_PARTY_NOTICES.md`.
