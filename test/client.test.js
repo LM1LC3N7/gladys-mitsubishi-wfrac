@@ -111,14 +111,20 @@ test('the envelope, and only own fields of plain objects read', async () => {
   const info = await client.deviceInfo(ADDRESS, 'https');
   assert.deepEqual(info, { airconId: '348e89c5a137' });
   assert.equal(calls[0].path, '/beaver/command/getDeviceInfo');
+  // The probe carries placeholder ids, never ours.
   assert.deepEqual(JSON.parse(calls[0].body), {
     apiVer: '1.0',
     command: 'getDeviceInfo',
-    deviceId: IDS.deviceId,
-    operatorId: IDS.operatorId,
+    deviceId: 'gladys-probe',
+    operatorId: 'gladys-probe',
     timestamp: 1_760_000_000,
   });
   assert.equal({}.x, undefined);
+  await client.register(ADDRESS, 'https', '348e89c5a137', 'UTC').catch(() => {});
+  const register = JSON.parse(calls[1].body);
+  assert.equal(register.operatorId, IDS.operatorId);
+  assert.equal(register.deviceId, IDS.deviceId);
+  assert.equal(register.contents.accountId, IDS.operatorId);
 });
 
 test('answers that are not what they should be', async () => {

@@ -13,7 +13,10 @@ import {
   parseFeatureId,
   strictNumber,
 } from '../src/devices.js';
-import { newIds, normalizeMemory, serializeMemory } from '../src/store.js';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { fileStore, newIds, normalizeIds, normalizeMemory, serializeMemory } from '../src/store.js';
 
 test('addresses: IPv4 or host names, port 51443 unless given, at most 8, duplicates once', () => {
   assert.deepEqual(parseAddress('192.168.1.70'), { host: '192.168.1.70', port: 51443 });
@@ -62,16 +65,44 @@ test('the persisted state: validated, bounded, no inherited key', () => {
   );
   raw.adapters.__proto__ = { registered: true };
   const memory = normalizeMemory(raw, now);
-  assert.deepEqual(memory.ids, ids);
   assert.deepEqual([...memory.adapters.keys()], ['348e89c5a137']);
   assert.equal(memory.adapters.get('348e89c5a137').registered, true);
-  // A pause too far in the future is not kept as is.
-  assert.equal(memory.addresses.get('192.168.1.70').pausedUntil, 0);
+  // A pause too far in the future is capped to the longest one, never dropped.
+  assert.equal(memory.addresses.get('192.168.1.70').pausedUntil, now + 6 * HOUR);
   assert.equal(memory.addresses.get('10.0.0.1').scheme, undefined);
   const again = normalizeMemory(JSON.parse(JSON.stringify(serializeMemory(memory))), now);
-  assert.deepEqual(again.ids, ids);
-  assert.equal(normalizeMemory({ operatorId: 'x', deviceId: 'y' }, now).ids, null);
-  assert.equal(normalizeMemory('garbage', now).ids, null);
+  assert.deepEqual([...again.adapters.keys()], ['348e89c5a137']);
+  // The ids live in their own file, never in the state.
+  assert.equal(serializeMemory(memory).operatorId, undefined);
+  assert.deepEqual(normalizeIds(ids), ids);
+  assert.equal(normalizeIds({ operatorId: 'x', deviceId: 'y' }), null);
+  assert.equal(normalizeIds('garbage'), null);
+});
+
+test('the ids file: ENOENT only is a first start; anything else is set aside, no new ids', async (t) => {
+  // A folder of the test itself (never the system temp folder), removed after.
+  const dir = mkdtempSync(join(fileURLToPath(new URL('.', import.meta.url)), 'tmp-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const idsPath = join(dir, 'ids.json');
+  const store = fileStore(join(dir, 'state.json'), idsPath);
+  assert.deepEqual(await store.loadIds(), { status: 'missing' });
+  const ids = newIds();
+  await store.saveIds(ids);
+  assert.deepEqual(await store.loadIds(), { status: 'ok', ids });
+  assert.equal(existsSync(`${idsPath}.tmp`), false);
+  // Half written (a power cut): set aside, and still "corrupt" at the next start.
+  writeFileSync(idsPath, '{"operatorId":"11111111-2222-4333-8444-5555');
+  assert.equal((await store.loadIds()).status, 'corrupt');
+  assert.equal(existsSync(`${idsPath}.corrupt`), true);
+  assert.equal(existsSync(idsPath), false);
+  assert.equal((await store.loadIds()).status, 'corrupt');
+  // Unreadable (a directory where the file should be): not a first start either.
+  mkdirSync(join(dir, 'odd'));
+  const odd = fileStore(join(dir, 'state.json'), join(dir, 'odd'));
+  assert.equal((await odd.loadIds()).status, 'corrupt');
+  // The state file is written whole (fsync, rename).
+  await store.save({ adapters: {} });
+  assert.deepEqual(await store.load(), { adapters: {} });
 });
 
 test('command values: strict numbers, the option values of the features only', () => {

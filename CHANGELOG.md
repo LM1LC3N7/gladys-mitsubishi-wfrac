@@ -35,7 +35,18 @@ the notes of the version's GitHub Release.
 - "Test the connection" button; status, Discovery list, states and badges
   published again after a reconnection to Gladys; a device published again
   keeps every feature already created.
-- Docs (French, English), cover, `THIRD_PARTY_NOTICES.md` (pywfrac and the Home
+- The identifier of Gladys in a file of its own (`/data/wfrac-ids.json`),
+  written once; an unreadable one is set aside and never replaced on its own
+  (the status says so, the "Register" button makes a new one).
+- Frames checked by their CRC: no command on a frame that does not match;
+  setpoints outside 10-33 °C and thermistor floors are unknown.
+- A command is refused while the previous one on another setting of the same
+  unit is not visible yet; a mode change brings the setpoint into the new
+  mode's range; the fresh read must answer result 0 with its airconId.
+- HTTPS tried first; the first request to an address carries placeholder
+  ids. The same adapter typed twice is read once.
+- Docs (French, English) with the 60 s lock, plain HTTP, fan-only range and
+  uninstalling, cover, `THIRD_PARTY_NOTICES.md` (pywfrac and the Home
   Assistant integration, MIT), shipped in the image with `LICENSE`.
 
 [Unreleased]: https://github.com/LM1LC3N7/gladys-mitsubishi-wfrac/commits/main

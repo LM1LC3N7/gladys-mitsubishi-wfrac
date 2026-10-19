@@ -8,9 +8,13 @@
 //
 // HTTPS: the adapter has a self-signed certificate (its name never matches the
 // address) and an old TLS stack (mbedTLS 2.4.0, 2016), which Node refuses by
-// default: the certificate is not checked and old TLS versions and ciphers
-// are allowed, as pywfrac does. This protects nothing against a device that
-// impersonates the adapter on the network: keep it on a trusted network.
+// default. So: the certificate is not checked (`rejectUnauthorized: false`),
+// TLS 1.0 and later are allowed, the OpenSSL security level is 0 (pywfrac
+// uses 1: level 0 also accepts the weakest keys and ciphers), and the legacy
+// renegotiation of old servers is allowed (SSL_OP_LEGACY_SERVER_CONNECT).
+// This protects nothing against a device that impersonates the adapter on
+// the network: keep it on a trusted network. Over plain HTTP (the oldest
+// firmware) everything travels in plain text.
 // -----------------------------------------------------------------------------
 
 import { constants as cryptoConstants } from 'node:crypto';

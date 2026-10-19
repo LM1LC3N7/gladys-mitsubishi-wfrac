@@ -13,6 +13,7 @@ import { WfracError, ERROR_KINDS } from '../../src/wfrac/http.js';
 import {
   INDOOR_TEMPERATURES,
   OUTDOOR_TEMPERATURES,
+  crc16,
   decodeStat,
   encodeCommand,
 } from '../../src/wfrac/protocol.js';
@@ -34,8 +35,10 @@ export function render(state) {
   const outdoor = OUTDOOR_TEMPERATURES.indexOf(state.outdoorTemperature ?? 29);
   const indoor = INDOOR_TEMPERATURES.indexOf(state.indoorTemperature ?? 23.5);
   const segments = [2, 0x80, 16, outdoor, 0, 0x80, 32, indoor, 0];
-  // The CRC of the receive block is not checked (see protocol.js): any two bytes.
-  return Buffer.from([...bytes.slice(0, start + 18), ...segments, 0, 0]).toString('base64');
+  const frame = [...bytes.slice(0, start + 18), ...segments];
+  // The receive CRC as the adapters compute it: the window shifted two bytes back.
+  const crc = crc16(frame.slice(start - 2, frame.length - 2));
+  return Buffer.from([...frame, crc & 0xff, crc >> 8]).toString('base64');
 }
 
 const answer = (status, body = '', headers = {}) => ({
@@ -124,7 +127,7 @@ export function fakeAdapters(byHost = { [HOST]: adapter() }) {
         firmType: 'WF-RAC-HTTPS',
         wireless: { firmVer: '025' },
         mcu: { firmVer: '200' },
-        numOfAccount: unit.registered.size,
+        numOfAccount: unit.full ? 4 : unit.registered.size,
       });
       const result = (normal) => unit.results[command] ?? normal;
       switch (command) {

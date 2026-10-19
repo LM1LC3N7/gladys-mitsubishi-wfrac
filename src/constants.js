@@ -103,7 +103,7 @@ export const HOUR = 60 * MINUTE;
 
 export const TIMINGS = {
   /** One read of the polling (pywfrac: 25 s; the adapter is a small board). */
-  readTimeout: 20 * SECOND,
+  readTimeout: 25 * SECOND,
   /** The adapter takes one connection at a time, 1 s apart at least (pywfrac, field rule). */
   requestSpacing: SECOND,
   /** Failed reads: 30 s, 1, 2, then 5 minutes, never shorter than the interval. */
@@ -118,6 +118,8 @@ export const TIMINGS = {
   registerCooldown: 30 * SECOND,
   /** The "Test the connection" button reads the adapters at most this often. */
   testCooldown: 10 * SECOND,
+  /** ...and answers within 80 s (its manifest timeout is 90 s). */
+  testAnswerBy: 80 * SECOND,
   /** The publisher sends what is pending every second; unchanged states again every 30 min. */
   flushInterval: SECOND,
   stateHeartbeat: 30 * MINUTE,

@@ -45,7 +45,7 @@ src/wfrac/client.js       the four commands, the envelope, parsing, the Gate (1 
 src/wfrac/http.js         the only network access (bounded), error kinds, TLS options
 src/devices.js            -> the Gladys devices, states and command values (pure)
 src/publisher.js          states within 300/min
-src/store.js              /data/wfrac-state.json: ids, registrations, schemes, pauses
+src/store.js              wfrac-ids.json (written once) + wfrac-state.json
 src/config.js             config_schema normalized (addresses, allow_commands, interval, language)
 src/constants.js          commands, result codes, feature keys, core enums, limits, timings
 src/i18n.js               runtime texts (en/fr)
@@ -77,7 +77,14 @@ scripts/cover.mjs         cover.png generator
 - **One request at a time per adapter, 1 s apart** (the Gate), a failed one
   included.
 - **Answers are hostile**: own fields of plain objects only, exact types,
-  64 KB at most, frames bounded; never log an answer nor the ids.
+  64 KB at most, frames bounded; never log an answer nor the ids. No command
+  on a frame whose CRC does not match (adapters: window `[start - 2, end -
+2)`; ours: the block), nor on a read without result 0 and its airconId.
+- **Ids**: `/data/wfrac-ids.json`, written once; only ENOENT makes new ids,
+  anything else is set aside (`.corrupt`) and only the button replaces it.
+  `getDeviceInfo` carries placeholder ids.
+- **Lifecycle**: start, `connected` and configuration changes run in one
+  chain (`serialized`); a replaced unit never reads again.
 - Never call the link to the adapter protected or secure: its HTTPS is not
   verified (self-signed certificate, old TLS accepted).
 - Units only from the core's `DEVICE_FEATURE_UNITS_BY_CATEGORY`.

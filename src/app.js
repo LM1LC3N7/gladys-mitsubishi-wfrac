@@ -53,7 +53,7 @@ import {
 import { ERRORS, MODE_NAMES, T, age, word } from './i18n.js';
 import { StatePublisher } from './publisher.js';
 import { fileStore, newIds, normalizeMemory, serializeMemory } from './store.js';
-import { WfracClient, errorReason } from './wfrac/client.js';
+import { Gate, WfracClient, errorReason } from './wfrac/client.js';
 import { ERROR_KINDS } from './wfrac/http.js';
 import { FRAME_FIELDS, encodeCommand, setpointRange } from './wfrac/protocol.js';
 
@@ -111,6 +111,7 @@ export class WfracApp {
     this.identity = newIds();
     this.idsKept = false;
     this.client = new WfracClient({ transport, now, timers, identity: () => this.identity });
+    this.discoveryGate = new Gate({ now, timers });
     this.publisher = new StatePublisher({ gladys, logger, now, timers });
     this.config = normalizeConfig();
     this.memory = normalizeMemory(null, now());
@@ -118,6 +119,9 @@ export class WfracApp {
     this.units = new Map();
     this.generation = 0;
     this.started = false;
+    this.lifecycle = Promise.resolve();
+    this.idsLoaded = false;
+    this.idsCorrupt = false;
     this.lastStatus = undefined;
     this.published = undefined;
     this.badge = undefined;
@@ -131,12 +135,29 @@ export class WfracApp {
 
   // --- Lifecycle -------------------------------------------------------------
 
-  async start(raw = {}) {
+  /**
+   * Starts, connections and configuration changes run one after the other:
+   * the SDK hands every message over without waiting for the previous one,
+   * and two starts at once would leave two read chains behind.
+   */
+  serialized(fn) {
+    const run = this.lifecycle.then(fn, fn);
+    this.lifecycle = run.catch(() => {});
+    return run;
+  }
+
+  start(raw = {}) {
+    return this.serialized(() => this.doStart(raw));
+  }
+
+  async doStart(raw) {
     this.stop();
     await Promise.all([...this.units.values()].map((u) => u.running));
     this.config = normalizeConfig(raw);
     this.memory = normalizeMemory(await this.store.load().catch(() => null), this.now());
-    await this.loadIds();
+    if (!this.idsLoaded) {
+      await this.loadIds();
+    }
     this.units = new Map(this.config.addresses.map((a) => [addressKey(a), freshUnit(a)]));
     this.published = undefined;
     this.badge = undefined;
@@ -149,22 +170,54 @@ export class WfracApp {
     }
   }
 
-  /** The kept ids, or new ones saved at once; `idsKept` false when /data refuses them. */
+  /**
+   * The ids of /data/wfrac-ids.json (a file of their own, written once). Only
+   * a missing file (ENOENT) is a first start: new ids are written. A file that
+   * cannot be read or holds no valid ids is set aside (.corrupt) and no new
+   * ids are made: they would take another of the adapter's four slots. The
+   * status says so; the "Register" button makes new ids on demand.
+   */
   async loadIds() {
-    if (this.memory.ids) {
-      this.identity = this.memory.ids;
+    let loaded;
+    try {
+      loaded = await this.store.loadIds();
+    } catch (err) {
+      loaded = { status: 'corrupt', reason: err.code ?? 'error' };
+    }
+    if (loaded.status === 'ok') {
+      this.identity = loaded.ids;
       this.idsKept = true;
+      this.idsCorrupt = false;
+      this.idsLoaded = true;
       return;
     }
-    this.memory.ids = this.identity;
+    if (loaded.status === 'corrupt') {
+      this.idsKept = false;
+      this.idsCorrupt = true;
+      this.idsLoaded = true;
+      this.logger.warn(
+        `The identifier file in /data is unreadable (${loaded.reason}): set aside, no registration on the adapters`,
+      );
+      return;
+    }
+    await this.writeNewIds();
+  }
+
+  async writeNewIds() {
+    const ids = newIds();
     try {
-      await this.store.save(serializeMemory(this.memory));
+      await this.store.saveIds(ids);
+      this.identity = ids;
       this.idsKept = true;
+      this.idsCorrupt = false;
+      this.idsLoaded = true;
+      return true;
     } catch (err) {
       this.idsKept = false;
       this.logger.warn(
         `Cannot keep the integration identifier in /data (${err.code ?? err.message}): no registration on the adapters`,
       );
+      return false;
     }
   }
 
@@ -192,14 +245,18 @@ export class WfracApp {
    * restarted), resend what Gladys keeps in memory only (status, Discovery
    * list, badges) and the last states. The pauses and registrations stay.
    */
-  async connected(raw = {}) {
+  connected(raw = {}) {
+    return this.serialized(() => this.doConnected(raw));
+  }
+
+  async doConnected(raw) {
     if (!this.started) {
       this.started = true;
-      await this.start(raw);
+      await this.doStart(raw);
       return;
     }
     if (this.needsRestart(raw)) {
-      await this.start(raw);
+      await this.doStart(raw);
       return;
     }
     this.config = normalizeConfig(raw);
@@ -219,9 +276,13 @@ export class WfracApp {
   }
 
   /** New addresses or interval restart; the option and the language apply at once. */
-  async configUpdated(raw = {}) {
+  configUpdated(raw = {}) {
+    return this.serialized(() => this.doConfigUpdated(raw));
+  }
+
+  async doConfigUpdated(raw) {
     if (this.needsRestart(raw)) {
-      await this.start(raw);
+      await this.doStart(raw);
       return;
     }
     const previous = this.config;
@@ -325,25 +386,35 @@ export class WfracApp {
   /** The next read: after the pause (never sooner than the interval), after a backoff, else the interval. */
   schedule(unit) {
     this.clearTimer(unit);
+    if (!this.current(unit)) {
+      return;
+    }
     const wait = this.paused(unit)
       ? Math.max(this.pausedUntil(unit) - this.now(), this.interval)
       : unit.online === false
         ? unit.wait
         : this.interval;
     const generation = this.generation;
-    unit.timer = this.timers.setTimeout(
-      () => {
-        unit.timer = undefined;
-        if (generation === this.generation) {
-          this.tick(unit).catch(() => this.logger.error('WF-RAC refresh failed'));
-        }
-      },
-      Math.max(0, wait ?? this.interval),
-    );
+    const delay = Math.max(0, wait ?? this.interval);
+    unit.nextAt = this.now() + delay;
+    unit.timer = this.timers.setTimeout(() => {
+      unit.timer = undefined;
+      if (generation === this.generation && this.current(unit)) {
+        this.tick(unit).catch(() => this.logger.error('WF-RAC refresh failed'));
+      }
+    }, delay);
+  }
+
+  /** Whether a unit is still one of the configuration (a restart replaces them all). */
+  current(unit) {
+    return this.units.get(unit.key) === unit;
   }
 
   /** One read at a time per adapter: a tick during a read joins it. */
   tick(unit) {
+    if (!this.current(unit)) {
+      return Promise.resolve();
+    }
     if (!unit.running) {
       unit.running = this.run(unit).finally(() => {
         unit.running = undefined;
@@ -354,6 +425,9 @@ export class WfracApp {
 
   async run(unit) {
     const generation = this.generation;
+    if (!this.current(unit) || unit.duplicateOf) {
+      return;
+    }
     if (this.paused(unit)) {
       await this.updateStatus();
       this.schedule(unit);
@@ -361,6 +435,10 @@ export class WfracApp {
     }
     try {
       await this.read(unit, generation);
+      if (unit.duplicateOf) {
+        await this.updateStatus();
+        return;
+      }
       if (generation === this.generation) {
         await this.client.channel(unit.address).gate.run(() => this.maybeRegister(unit));
       }
@@ -383,10 +461,25 @@ export class WfracApp {
   async read(unit, generation) {
     const memory = this.addressMemory(unit);
     if (!unit.verified) {
+      // HTTPS first: the ids travel in plain text over HTTP (getDeviceInfo
+      // carries placeholder ids anyway, see client.js).
       const known = memory.scheme ?? unit.scheme;
-      const schemes = known ? [known, known === 'http' ? 'https' : 'http'] : ['http', 'https'];
-      const { scheme, airconId } = await this.client.discover(unit.address, schemes);
-      if (generation !== this.generation) {
+      const schemes = known ? [known, known === 'http' ? 'https' : 'http'] : ['https', 'http'];
+      // One discovery at a time across the adapters: the same adapter typed
+      // under two addresses is found before both read it.
+      const { scheme, airconId } = await this.discoveryGate.run(() =>
+        this.client.discover(unit.address, schemes),
+      );
+      if (generation !== this.generation || !this.current(unit)) {
+        return;
+      }
+      const owner = [...this.units.values()].find(
+        (u) => u !== unit && u.airconId && unitKey(u.airconId) === unitKey(airconId),
+      );
+      if (owner) {
+        // The same adapter under another address: read once, through the first.
+        unit.duplicateOf = owner.key;
+        this.logger.warn(`WF-RAC ${unit.key}: same adapter as ${owner.key}, not read twice`);
         return;
       }
       if (unit.airconId && unitKey(unit.airconId) !== unitKey(airconId)) {
@@ -416,6 +509,12 @@ export class WfracApp {
     unit.state = read.state;
     unit.firmType = read.firmType ?? unit.firmType;
     unit.firmware = read.firmware ?? unit.firmware;
+    unit.numOfAccount = read.numOfAccount ?? unit.numOfAccount;
+    if (!read.state.verified && unit.unverified !== true) {
+      // Logged when it starts: shown, but no command is decided on such a frame.
+      this.logger.warn(`WF-RAC ${unit.key}: frame CRC does not match (crc), commands refused`);
+    }
+    unit.unverified = !read.state.verified;
     this.observe(unit);
   }
 
@@ -438,15 +537,19 @@ export class WfracApp {
     this.logger.warn(`WF-RAC ${unit.key}: ${reason}; next try in ${Math.round(wait / 1000)} s`);
   }
 
-  /** A 429: every path waits (polling, buttons, commands), kept in /data. */
-  async pause(unit, err) {
+  /**
+   * A 429: every path waits (polling, buttons, commands), kept in /data. The
+   * pause holds in memory at once; the save runs in the background (an ack
+   * never waits for /data).
+   */
+  pause(unit, err) {
     const wait = Math.min(
       TIMINGS.rateLimitMax,
       Math.max(TIMINGS.rateLimitMin, err.retryAfter ?? TIMINGS.rateLimitDefault),
     );
     const memory = this.addressMemory(unit);
     memory.pausedUntil = Math.max(memory.pausedUntil, this.now() + wait);
-    await this.saveMemory();
+    this.saveMemory().catch(() => {});
   }
 
   // --- Registration ------------------------------------------------------------
@@ -494,7 +597,9 @@ export class WfracApp {
       return { error: errorReason(err) };
     }
     record.registered = result === 0;
-    record.full = result === NOT_REGISTERED_CODE;
+    // Result 2 is also the adapter's catch-all refusal: "full" only when the
+    // last read counted four accounts (then never retried on its own).
+    record.full = result === NOT_REGISTERED_CODE && unit.numOfAccount === 4;
     this.memory.adapters.set(key, record);
     await this.saveMemory();
     if (record.registered) {
@@ -504,7 +609,7 @@ export class WfracApp {
     } else {
       this.logger.warn(`WF-RAC ${unit.key}: registration refused (result ${result})`);
     }
-    return { result };
+    return { result, full: record.full };
   }
 
   /** The "Register Gladys on the adapters" button. */
@@ -512,13 +617,21 @@ export class WfracApp {
     if (!this.config.allowCommands) {
       return T.register.disabled;
     }
-    if (!this.idsKept) {
-      return T.noIds;
-    }
     if (this.now() - this.lastRegisterAt < TIMINGS.registerCooldown) {
       return T.register.cooldown;
     }
     this.lastRegisterAt = this.now();
+    const notes = [];
+    if (this.idsCorrupt) {
+      // The user asks for it: new ids (the slot of the old ones stays taken).
+      if (!(await this.writeNewIds())) {
+        return T.noIds;
+      }
+      notes.push(T.register.newIds);
+    }
+    if (!this.idsKept) {
+      return T.noIds;
+    }
     const units = [...this.units.values()].filter((u) => u.airconId && u.scheme);
     if (units.length === 0) {
       return T.register.none;
@@ -536,7 +649,7 @@ export class WfracApp {
         if (outcome?.result === 0) {
           return T.register.ok(name);
         }
-        if (outcome?.result === NOT_REGISTERED_CODE) {
+        if (outcome?.full) {
           return T.register.full(name);
         }
         return T.register.failed(
@@ -546,7 +659,7 @@ export class WfracApp {
       }),
     );
     await this.updateStatus();
-    return join(...lines);
+    return join(...notes, ...lines);
   }
 
   // --- Gladys ----------------------------------------------------------------
@@ -693,19 +806,26 @@ export class WfracApp {
     if (units.length === 0) {
       return [false, join(T.noAddress, ...notes)];
     }
-    const paused = units.filter((u) => this.paused(u));
-    const down = units.filter((u) => u.online === false && !this.paused(u));
-    const up = units.filter((u) => u.online === true);
+    const counted = units.filter((u) => !u.duplicateOf);
+    const paused = counted.filter((u) => this.paused(u));
+    const down = counted.filter((u) => u.online === false && !this.paused(u));
+    const up = counted.filter((u) => u.online === true);
     if (paused.length > 0) {
       notes.unshift(T.rateLimited(paused.map((u) => this.nameOf(u)).join(', ')));
     }
     if (down.length > 0) {
       notes.unshift(T.unreachable(down.map((u) => this.nameOf(u)).join(', ')));
     }
+    const duplicates = units.filter((u) => u.duplicateOf);
+    if (duplicates.length > 0) {
+      notes.push(T.duplicate(duplicates.map((u) => `${u.key} = ${u.duplicateOf}`).join(', ')));
+    }
+    if (this.idsCorrupt) {
+      notes.push(T.idsCorrupt);
+    } else if (this.config.allowCommands && !this.idsKept) {
+      notes.push(T.noIds);
+    }
     if (this.config.allowCommands) {
-      if (!this.idsKept) {
-        notes.push(T.noIds);
-      }
       const full = up.filter((u) => this.registration(u.airconId).full);
       if (full.length > 0) {
         notes.push(T.tableFull(full.map((u) => this.nameOf(u)).join(', ')));
@@ -717,7 +837,7 @@ export class WfracApp {
       }
       return [false, join(...notes)];
     }
-    return [true, join(T.connected(up.length, units.length), ...notes)];
+    return [true, join(T.connected(up.length, counted.length), ...notes)];
   }
 
   /** A device was created (or updated): send its last values at once. */
@@ -755,9 +875,28 @@ export class WfracApp {
       return join(T.test.cooldown, this.status()[1]);
     }
     this.lastTestAt = this.now();
-    // A read of every adapter now (a read in progress is joined; a paused one is not read).
-    await Promise.all([...this.units.values()].map((unit) => this.tick(unit)));
-    return this.status()[1];
+    // A read of every adapter now (a read in progress is joined; a paused one
+    // is not read). An adapter that failed keeps its delay: never read sooner.
+    const waiting = [];
+    const reads = Promise.all(
+      [...this.units.values()].map((unit) => {
+        if (unit.online === false && unit.nextAt > this.now()) {
+          waiting.push(T.test.waiting(this.nameOf(unit), age(unit.nextAt - this.now())));
+          return undefined;
+        }
+        return this.tick(unit);
+      }),
+    );
+    // The answer within the button's time (90 s), even behind slow adapters.
+    let timer;
+    await Promise.race([
+      reads,
+      new Promise((resolve) => {
+        timer = this.timers.setTimeout(resolve, TIMINGS.testAnswerBy);
+      }),
+    ]);
+    this.timers.clearTimeout(timer);
+    return join(this.status()[1], ...waiting);
   }
 
   // --- Commands --------------------------------------------------------------
@@ -860,13 +999,15 @@ export class WfracApp {
         deadline: readBy,
         held: true,
         minMs: TIMINGS.commandMinRead,
+        // A command is decided only on result 0 with its airconId.
+        strict: true,
       });
     } catch (err) {
       if (err.kind === ERROR_KINDS.LATE) {
         throw this.refusal(ERRORS.tooSlow);
       }
       if (err.kind === ERROR_KINDS.RATE_LIMITED) {
-        await this.pause(unit, err);
+        this.pause(unit, err);
         this.updateStatus().catch(() => {});
       }
       throw this.refusal(ERRORS.unknownState(errorReason(err)));
@@ -879,11 +1020,37 @@ export class WfracApp {
     this.publishAll().catch((err) => this.logger.warn(`Publishing failed: ${err.message}`));
 
     const state = fresh.state;
+    if (!state.verified) {
+      throw this.refusal(ERRORS.unverified);
+    }
     if (FRAME_FIELDS.some((field) => state[field] === undefined)) {
       throw this.refusal(ERRORS.incompleteState);
     }
+    // A previous command on another field, not visible yet: the frame built
+    // on this read would undo it. Refused; never merged with the memory.
+    for (const [key, guard] of this.guards) {
+      const field = key.slice(target.unit.length + 1);
+      if (
+        key.startsWith(`${target.unit}:`) &&
+        !Object.hasOwn(change, field) &&
+        this.guardActive(key) &&
+        !guard.moved &&
+        state[field] === guard.from
+      ) {
+        throw this.refusal(ERRORS.previousPending);
+      }
+    }
     if (change.presetTemp !== undefined) {
       this.checkSetpoint(unit, state, change.presetTemp);
+    }
+    if (change.mode !== undefined && change.mode !== state.mode) {
+      // The setpoint as read may lie outside the range of the new mode: it is
+      // brought into that range (and the feature's bounds), and sent with it.
+      const [min, max] = this.setpointBounds(unit, change.mode, state.modelNrRaw);
+      const presetTemp = Math.min(max, Math.max(min, state.presetTemp));
+      if (presetTemp !== state.presetTemp) {
+        change = { ...change, presetTemp };
+      }
     }
     const fields = Object.keys(change);
     const guarded = fields.some((field) => this.guardActive(`${target.unit}:${field}`));
@@ -930,7 +1097,7 @@ export class WfracApp {
         throw this.refusal(ERRORS.notSent(reason));
       }
       if (err.kind === ERROR_KINDS.RATE_LIMITED) {
-        await this.pause(unit, err);
+        this.pause(unit, err);
         this.updateStatus().catch(() => {});
         throw this.refusal(ERRORS.refused(reason));
       }
@@ -956,7 +1123,7 @@ export class WfracApp {
       throw this.refusal(ERRORS.locked);
     }
     if (result === NOT_REGISTERED_CODE) {
-      await this.markNotRegistered(unit);
+      this.markNotRegistered(unit);
       throw this.refusal(ERRORS.notRegistered);
     }
     if (REFUSED_CODES.has(result)) {
@@ -976,14 +1143,7 @@ export class WfracApp {
    * table), within the bounds of the created feature too.
    */
   checkSetpoint(unit, state, value) {
-    let [min, max] = setpointRange(state.mode, state.modelNrRaw);
-    const feature = this.createdDevice(unitIds(this.gladys, unit.airconId).device)?.features?.find(
-      (f) => f?.external_id === unitIds(this.gladys, unit.airconId).feature(FEATURES.SETPOINT),
-    );
-    if (Number.isFinite(feature?.min) && Number.isFinite(feature?.max)) {
-      min = Math.max(min, feature.min);
-      max = Math.min(max, feature.max);
-    }
+    const [min, max] = this.setpointBounds(unit, state.mode, state.modelNrRaw);
     if (value < min || value > max) {
       const name = modeName(state.mode);
       throw this.refusal(
@@ -994,6 +1154,23 @@ export class WfracApp {
         ),
       );
     }
+  }
+
+  /**
+   * The range of a mode (fan only: the union of the regulating modes, the
+   * setpoint applying to the next one), within the created feature's bounds.
+   */
+  setpointBounds(unit, mode, modelNrRaw) {
+    let [min, max] = setpointRange(mode, modelNrRaw);
+    const ids = unitIds(this.gladys, unit.airconId);
+    const feature = this.createdDevice(ids.device)?.features?.find(
+      (f) => f?.external_id === ids.feature(FEATURES.SETPOINT),
+    );
+    if (Number.isFinite(feature?.min) && Number.isFinite(feature?.max)) {
+      min = Math.max(min, feature.min);
+      max = Math.min(max, feature.max);
+    }
+    return [min, max];
   }
 
   markRegistered(unit) {
@@ -1008,19 +1185,28 @@ export class WfracApp {
     }
   }
 
-  async markNotRegistered(unit) {
+  /** In memory at once; saved in the background (the ack never waits for /data). */
+  markNotRegistered(unit) {
     const record = this.registration(unit.airconId);
     this.memory.adapters.set(unitKey(unit.airconId), { ...record, registered: false });
-    await this.saveMemory();
+    this.saveMemory().catch(() => {});
   }
 
-  /** Spaced reads of the unit after a command: its effect, then a check. */
+  /**
+   * Spaced reads of the unit after a command: its effect, then a check. None
+   * while the unit is offline or paused: its backoff stands.
+   */
   followUp(unit) {
     const generation = this.generation;
     for (const delay of TIMINGS.followUps) {
       const handle = this.timers.setTimeout(() => {
         unit.followUps.delete(handle);
-        if (generation === this.generation && !this.paused(unit)) {
+        if (
+          generation === this.generation &&
+          this.current(unit) &&
+          unit.online !== false &&
+          !this.paused(unit)
+        ) {
           this.tick(unit).catch(() => this.logger.error('WF-RAC refresh failed'));
         }
       }, delay);

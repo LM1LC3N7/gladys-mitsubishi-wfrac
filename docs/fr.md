@@ -32,8 +32,12 @@ Un appareil par adaptateur (un par unité intérieure), avec :
 
 La consigne est bornée à la plage de l'appareil pour le mode lu juste avant :
 16 à 30 °C en froid, 18 à 30 °C sinon ; les modèles ZT (2025) vont de 10 °C
-en chauffage à 33 °C en froid et déshumidification. Une valeur hors plage est
-refusée, jamais envoyée.
+en chauffage à 33 °C en froid et déshumidification. En ventilation seule, la
+consigne vaut pour le mode suivant : la plage est celle de tous les modes
+(16 à 30 °C, 10 à 33 °C sur ZT). Une valeur hors plage est refusée, jamais
+envoyée. Un changement de mode ramène la consigne lue dans la plage du
+nouveau mode et l'envoie avec lui (par exemple 10 °C en chauffage devient
+16 °C en passant en froid).
 
 ## Installation
 
@@ -41,13 +45,16 @@ refusée, jamais envoyée.
    apparaît souvent sous un nom fait de son adresse MAC).
 2. Dans la configuration de l'intégration, saisissez les adresses, séparées
    par des virgules (8 au plus). Le port est 51443 ; l'intégration trouve
-   seule si l'adaptateur parle HTTP ou HTTPS.
+   seule si l'adaptateur parle HTTPS (essayé d'abord) ou HTTP. Un même
+   adaptateur saisi deux fois (adresse IP et nom) n'est lu qu'une fois.
 3. Enregistrez, puis ajoutez les climatiseurs depuis l'onglet **Découverte**.
 4. Pour les commander depuis Gladys, activez **Autoriser les commandes**.
 
 Chaque adaptateur est lu toutes les 60 secondes (réglable de 30 s à 10 min),
 une requête à la fois, une seconde d'écart au moins : l'adaptateur n'accepte
-qu'une connexion à la fois.
+qu'une connexion à la fois. Après un échec, l'adaptateur est relu après 30 s,
+1, 2 puis 5 min, jamais plus tôt que l'intervalle ; le bouton **Tester la
+connexion** respecte ce délai et indique le prochain essai.
 
 ## Les commandes et l'enregistrement sur l'adaptateur
 
@@ -58,14 +65,19 @@ pourquoi :
 
 - les commandes sont **désactivées par défaut** : sans l'option, rien n'est
   enregistré sur l'adaptateur ;
-- Gladys utilise **un seul identifiant** pour toute l'installation, gardé
-  dans son dossier `/data` ; s'il ne peut pas y être gardé, Gladys ne
-  s'enregistre pas du tout (chaque redémarrage prendrait une autre place) ;
+- Gladys utilise **un seul identifiant** pour toute l'installation, écrit une
+  fois dans son propre fichier de `/data` ; s'il ne peut pas y être écrit,
+  Gladys ne s'enregistre pas du tout (chaque redémarrage prendrait une autre
+  place). Si ce fichier devient illisible, il est mis de côté, Gladys ne s'en
+  crée pas un autre toute seule et le statut le dit : le bouton **Enregistrer
+  Gladys sur les adaptateurs** en crée un nouveau à votre demande (l'ancienne
+  place reste prise, voir « Désinstaller ») ;
 - elle s'enregistre **une fois** par adaptateur ; après un refus, elle
   réessaie au plus une fois par heure, jamais en boucle ;
-- si les quatre places sont prises, elle ne réessaie plus d'elle-même : le
-  statut le dit. Retirez une application ou un téléphone dans Smart M-Air,
-  puis cliquez sur **Enregistrer Gladys sur les adaptateurs**.
+- si les quatre places sont prises (l'adaptateur compte quatre comptes), elle
+  ne réessaie plus d'elle-même : le statut le dit. Retirez une application
+  ou un téléphone dans Smart M-Air, puis cliquez sur **Enregistrer Gladys sur
+  les adaptateurs**.
 
 Chaque commande :
 
@@ -80,19 +92,31 @@ Chaque commande :
   l'envoi, le message est « Commande envoyée, sans confirmation » : vérifiez
   l'état quelques secondes plus tard (Gladys relit l'appareil après 5 et 20
   secondes) ;
-- n'est pas envoyée si le climatiseur est déjà dans l'état demandé.
+- n'est pas envoyée si le climatiseur est déjà dans l'état demandé ;
+- est refusée si la trame lue n'est pas vérifiable (son CRC ne correspond
+  pas), ou si l'adaptateur ne donne pas un état frais (résultat 0) ;
+- est refusée, sans être envoyée, si la commande précédente sur un autre
+  réglage du même climatiseur n'est pas encore visible dans l'état relu
+  (« réessayez dans quelques secondes ») : la trame annulerait cette
+  commande. Gladys ne complète jamais l'état relu avec sa mémoire.
 
 Une seule commande à la fois par climatiseur : une seconde, pendant qu'une
 première est en cours, est refusée.
 
-**Verrou de 60 secondes.** Après chaque écriture, l'adaptateur réserve
-l'écriture à son auteur pendant une minute. Une commande envoyée moins d'une
-minute après un usage de l'application Smart M-Air est donc refusée
-(« réessayez dans une minute ») ; Gladys n'attend pas et ne réessaie pas.
+**Verrou de 60 secondes.** Chaque écriture réussie réserve l'écriture à son
+auteur (l'appareil qui l'a envoyée) pendant une minute ; les lectures ne sont
+pas concernées. Donc : une commande Gladys envoyée moins d'une minute après
+un réglage fait depuis l'application Smart M-Air (ou un autre contrôleur Wi-Fi)
+est refusée (« réessayez dans une minute ») ; Gladys n'attend pas et ne
+réessaie pas. Dans l'autre sens, l'application est refusée pendant la minute
+qui suit chaque commande de Gladys. La télécommande infrarouge ne passe pas
+par l'adaptateur et n'est pas concernée.
 
 **Marche/arrêt et « tout éteindre ».** Comme pour MELCloud, la marche/arrêt
-est une fonctionnalité de climatisation : une scène ou un assistant vocal qui
-« éteint tout » peut éteindre le climatiseur.
+est une fonctionnalité de climatisation, pas un interrupteur. Selon ce qui
+l'expose (assistant vocal, HomeKit, Google Home, MCP…), un « éteins tout »
+peut atteindre le climatiseur : vérifiez vos scènes et assistants si vous ne
+le voulez pas.
 
 Changer de mode ne rallume pas un climatiseur éteint : seul le mode change.
 
@@ -105,10 +129,23 @@ Changer de mode ne rallume pas un climatiseur éteint : seul le mode change.
   remonte pas la position du volet horizontal ni le 3D auto : comme
   l'application et pywfrac, chaque commande les renvoie alors en
   automatique / désactivé.
+- Une valeur qui ne peut pas être lue (consigne hors de 10 à 33 °C, capteur de
+  température absent ou coupé) est laissée inconnue, jamais publiée.
 - Si l'adaptateur répond lentement (plus de 2 à 3 secondes), les commandes
   sont refusées sans être envoyées. Réessayez ; dites-nous si cela arrive
   souvent.
 - Une seule installation Gladys par adaptateur est prévue.
+
+## Désinstaller
+
+La place prise par Gladys sur chaque adaptateur reste occupée après la
+désinstallation : cette version n'a pas encore de bouton pour la libérer.
+Avant de désinstaller (ou pour libérer l'ancienne place après un fichier
+d'identifiant illisible), retirez l'entrée correspondante dans l'application
+Smart M-Air si elle l'affiche (non vérifié : un client enregistré en local
+peut ne pas y apparaître). À défaut, une réinitialisation de l'adaptateur
+(voir sa notice) devrait vider sa table de comptes (non vérifié) ; les
+téléphones devront alors être appairés de nouveau.
 
 ## Sécurité
 
@@ -118,13 +155,17 @@ adaptateurs sur un **réseau de confiance** (un réseau invités ou un VLAN
 dédié est une bonne idée).
 
 Selon son micrologiciel, l'adaptateur parle HTTP ou HTTPS. En HTTPS, son
-certificat est auto-signé et sa pile TLS très ancienne : l'intégration
-n'en vérifie pas le certificat et accepte les anciennes versions de TLS,
-comme pywfrac. Cela ne protège pas contre un appareil qui se ferait passer
-pour l'adaptateur sur votre réseau.
+certificat est auto-signé et sa pile TLS très ancienne : l'intégration n'en
+vérifie pas le certificat, accepte TLS 1.0 et plus, le niveau de sécurité 0
+d'OpenSSL et l'ancienne renégociation. Cela ne protège pas contre un appareil
+qui se ferait passer pour l'adaptateur sur votre réseau. En **HTTP** (les plus
+anciens micrologiciels), tout passe en clair sur le réseau, l'identifiant de
+Gladys compris.
 
 L'identifiant de Gladys (opérateur et appareil) est gardé dans `/data`,
-jamais écrit dans les journaux, et envoyé seulement aux adaptateurs.
+jamais écrit dans les journaux, et envoyé seulement aux adaptateurs déjà
+identifiés : la première requête vers une adresse (qui sert à reconnaître
+l'adaptateur) porte un identifiant fictif.
 
 ## Crédits
 

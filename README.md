@@ -33,7 +33,7 @@ src/devices.js      one adapter -> one Gladys device; command values (pure)
 src/wfrac/protocol.js  the airconStat frame, decoded and encoded (pure)
 src/wfrac/client.js    getDeviceInfo, getAirconStat, setAirconStat, updateAccountInfo
 src/wfrac/http.js      one POST over HTTP or HTTPS, bounded in time and size
-src/store.js        /data/wfrac-state.json: ids, registrations, schemes, 429 pauses
+src/store.js        /data/wfrac-ids.json (written once), wfrac-state.json
 src/publisher.js    states to Gladys within 300 per minute
 ```
 

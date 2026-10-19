@@ -64,6 +64,9 @@ export function errorReason(err) {
 
 const late = () => new WfracError(ERROR_KINDS.LATE, 'Too late to send');
 
+/** The ids getDeviceInfo carries (see `call`). */
+export const PROBE_IDS = Object.freeze({ operatorId: 'gladys-probe', deviceId: 'gladys-probe' });
+
 /**
  * One job at a time; `first` jumps the queue (commands), never the job in
  * flight. `startBy`: a job still waiting at that time leaves the queue and is
@@ -238,7 +241,11 @@ export class WfracClient {
           throw Object.assign(err, { notSent: true, beforeSend: true });
         }
       }
-      const { operatorId, deviceId } = this.identity();
+      // getDeviceInfo is sent while the scheme (and the device answering) is
+      // not known yet, plain HTTP included: it carries placeholder ids (the
+      // adapter does not evaluate its body), never ours.
+      const { operatorId, deviceId } =
+        command === COMMANDS.DEVICE_INFO ? PROBE_IDS : this.identity();
       const envelope = {
         apiVer: API_VERSION,
         command,
@@ -307,8 +314,13 @@ export class WfracClient {
     throw first ?? new WfracError(ERROR_KINDS.UNREACHABLE, 'No scheme');
   }
 
-  /** getAirconStat -> { state, expires, firmType, firmware }. */
-  async stat(address, scheme, airconId, options = {}) {
+  /**
+   * getAirconStat -> { state, expires, firmType, firmware, numOfAccount }.
+   * `strict` (the read a command is decided on): result 0 and the airconId
+   * of the adapter are required; a poll accepts a frame with another result
+   * (shown, never acted on).
+   */
+  async stat(address, scheme, airconId, { strict = false, ...options } = {}) {
     const { result, contents } = await this.answer(address, {
       ...options,
       scheme,
@@ -316,7 +328,7 @@ export class WfracClient {
       contents: { airconId },
     });
     const frame = own(contents, 'airconStat');
-    if (typeof frame !== 'string') {
+    if (typeof frame !== 'string' || (strict && result !== 0)) {
       if (result) {
         // Result 1 here: the adapter had no fresh data from the indoor unit.
         throw new WfracError(ERROR_KINDS.REFUSED, `result ${result}`, { result });
@@ -324,15 +336,21 @@ export class WfracClient {
       throw new WfracError(ERROR_KINDS.PROTOCOL, 'No airconStat');
     }
     const answeredId = own(contents, 'airconId');
-    if (answeredId !== undefined && answeredId !== airconId) {
+    if (
+      (strict && answeredId === undefined) ||
+      (answeredId !== undefined && answeredId !== airconId)
+    ) {
       throw new WfracError(ERROR_KINDS.PROTOCOL, 'Another adapter answered');
     }
     const expires = own(contents, 'expires');
+    const accounts = own(contents, 'numOfAccount');
     return {
       state: decodeStat(frame),
       expires: Number.isInteger(expires) ? expires : undefined,
       firmType: text(own(contents, 'firmType')),
       firmware: text(own(own(contents, 'wireless'), 'firmVer')),
+      numOfAccount:
+        Number.isInteger(accounts) && accounts >= 0 && accounts <= 4 ? accounts : undefined,
     };
   }
 

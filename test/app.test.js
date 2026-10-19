@@ -108,23 +108,30 @@ test('without an address, the status asks for it and nothing is requested', asyn
 });
 
 test('first read: the scheme is found, one request at a time and 1 s apart', async (t) => {
-  const server = fakeAdapters();
+  // An old adapter speaking plain HTTP: HTTPS is tried first.
+  const server = fakeAdapters({ [HOST]: adapter({ scheme: 'http' }) });
   const store = memoryStore();
   const { gladys } = await setup(t, { server, store });
   assert.deepEqual(
     server.requests.map((r) => `${r.scheme} ${r.command}`),
-    ['http getDeviceInfo', 'https getDeviceInfo', 'https getAirconStat'],
+    ['https getDeviceInfo', 'http getDeviceInfo', 'http getAirconStat'],
   );
   for (let i = 1; i < server.requests.length; i += 1) {
     assert.ok(server.requests[i].at - server.requests[i - 1].at >= SECOND, 'spacing');
   }
+  // The probe never carries our ids (it may go in plain text to an unknown device).
+  for (const probe of server.commands('getDeviceInfo')) {
+    assert.equal(probe.body.operatorId, 'gladys-probe');
+    assert.equal(probe.body.deviceId, 'gladys-probe');
+  }
   const envelope = server.requests[2].body;
   assert.equal(envelope.apiVer, '1.0');
+  assert.equal(envelope.operatorId, store.ids.operatorId);
   assert.match(envelope.operatorId, /^[0-9a-f-]{36}$/);
   assert.match(envelope.deviceId, /^gladys-[0-9a-f]{16}$/);
   assert.equal(envelope.timestamp, Math.round(NOW / 1000) + 2);
   assert.deepEqual(envelope.contents, { airconId: AIRCON_ID });
-  assert.equal(store.data.addresses[HOST].scheme, 'https');
+  assert.equal(store.data.addresses[HOST].scheme, 'http');
   assert.equal(gladys.fake.connectionStatus.connected, true);
   assert.match(message(gladys).fr, /^Connecté : 1 adaptateur sur 1 répond\./);
 });
@@ -200,7 +207,7 @@ test('allowed: registered once with one kept operator id, never again after a re
   const registrations = server.commands('updateAccountInfo');
   assert.equal(registrations.length, 1);
   assert.deepEqual(registrations[0].body.contents, {
-    accountId: store.data.operatorId,
+    accountId: store.ids.operatorId,
     airconId: AIRCON_ID,
     remote: 0,
     timezone: 'Europe/Paris',
@@ -209,13 +216,17 @@ test('allowed: registered once with one kept operator id, never again after a re
   await advance(3 * HOUR, MINUTE);
   assert.equal(server.commands('updateAccountInfo').length, 1);
   // A restart (same /data): same ids, no new registration.
-  const operatorId = store.data.operatorId;
+  const operatorId = store.ids.operatorId;
   await app.start(ALLOWED);
   await advance(5 * SECOND, 500);
   assert.equal(app.units.get(HOST).online, true);
-  assert.equal(store.data.operatorId, operatorId);
+  assert.equal(store.ids.operatorId, operatorId);
   assert.equal(server.commands('updateAccountInfo').length, 1);
-  assert.ok(server.requests.every((r) => r.body.operatorId === operatorId));
+  assert.ok(
+    server.requests
+      .filter((r) => r.command !== 'getDeviceInfo')
+      .every((r) => r.body.operatorId === operatorId),
+  );
 });
 
 test('a setpoint: read again, then one full frame from that read', async (t) => {
@@ -489,7 +500,7 @@ test('a reconnection republishes the status, the Discovery list and keeps every 
   assert.ok(gladys.fake.connectionStatuses.length > statuses);
   const again = gladys.fake.discoveredDevices[0];
   assert.ok(again.features.some((f) => f.external_id === `${device()}:legacy-feature`));
-  assert.ok(server.requests.length >= 3);
+  assert.ok(server.requests.length >= 2);
 });
 
 test('the ack never waits for a publication to Gladys', async (t) => {
@@ -572,6 +583,6 @@ test('the ids never appear in the logs', async (t) => {
   const { send } = await setup(t, { config: ALLOWED, logs, store });
   await send('binary', 0);
   const text = logs.join('\n');
-  assert.ok(!text.includes(store.data.operatorId));
-  assert.ok(!text.includes(store.data.deviceId));
+  assert.ok(!text.includes(store.ids.operatorId));
+  assert.ok(!text.includes(store.ids.deviceId));
 });

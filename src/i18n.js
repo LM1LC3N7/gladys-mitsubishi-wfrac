@@ -98,6 +98,15 @@ export const T = {
     'Commands are allowed, but the integration cannot keep its identifier in /data: it does not register on the adapters (each restart would take another of their four slots), so commands will be refused.',
     "Les commandes sont autorisées, mais l'intégration ne peut pas garder son identifiant dans /data : elle ne s'enregistre pas sur les adaptateurs (chaque redémarrage prendrait une autre de leurs quatre places), les commandes seront donc refusées.",
   ),
+  idsCorrupt: both(
+    'The identifier file of Gladys in /data is unreadable: it was set aside (.corrupt) and Gladys no longer registers on the adapters, so as not to take another of their four slots. To start again with a new identifier, allow the commands and click "Register Gladys on the adapters" (remove the old one in Smart M-Air if you can).',
+    "Le fichier d'identifiant de Gladys dans /data est illisible : il a été mis de côté (.corrupt) et Gladys ne s'enregistre plus sur les adaptateurs, pour ne pas prendre une autre de leurs quatre places. Pour repartir avec un nouvel identifiant, autorisez les commandes et cliquez sur « Enregistrer Gladys sur les adaptateurs » (retirez l'ancien dans Smart M-Air si vous le pouvez).",
+  ),
+  duplicate: (pairs) =>
+    both(
+      `Same adapter typed twice, read once: ${pairs}.`,
+      `Même adaptateur saisi deux fois, lu une seule fois : ${pairs}.`,
+    ),
   tableFull: (names) =>
     both(
       `The adapter has no free slot for Gladys (4 apps or controllers registered): ${names}. Remove one in the Smart M-Air app, then click "Register Gladys on the adapters".`,
@@ -113,6 +122,10 @@ export const T = {
       'No adapter answered yet: check the addresses, then try again.',
       "Aucun adaptateur n'a encore répondu : vérifiez les adresses, puis réessayez.",
     ),
+    newIds: both(
+      'New identifier created (the unreadable one was set aside).',
+      "Nouvel identifiant créé (l'illisible a été mis de côté).",
+    ),
     ok: (name) => both(`${name}: registered.`, `${name} : enregistré.`),
     full: (name) =>
       both(
@@ -123,6 +136,11 @@ export const T = {
   },
   test: {
     cooldown: both('Tested less than 10 s ago.', 'Testé il y a moins de 10 s.'),
+    waiting: (name, wait) =>
+      both(
+        `${name}: failed, next try in ${wait.en} (not read sooner).`,
+        `${name} : en échec, nouvel essai dans ${wait.fr} (pas lu plus tôt).`,
+      ),
   },
 };
 
@@ -184,8 +202,16 @@ export const ERRORS = {
       `L'adaptateur a refusé la commande (${reason}).`,
     ),
   locked: both(
-    'The adapter declined the command: another app (Smart M-Air, a remote) wrote less than a minute ago, or the unit refused it. Try again in a minute.',
-    "L'adaptateur a refusé la commande : une autre application (Smart M-Air, une télécommande) a écrit il y a moins d'une minute, ou l'appareil l'a refusée. Réessayez dans une minute.",
+    'The adapter declined the command: another app (Smart M-Air, another controller) wrote less than a minute ago, or the unit refused it. Try again in a minute.',
+    "L'adaptateur a refusé la commande : une autre application (Smart M-Air, un autre contrôleur) a écrit il y a moins d'une minute, ou l'appareil l'a refusée. Réessayez dans une minute.",
+  ),
+  unverified: both(
+    'Frame not verifiable (its CRC does not match): not sent.',
+    'Trame non vérifiable (son CRC ne correspond pas) : non envoyée.',
+  ),
+  previousPending: both(
+    'The previous command is not visible yet: not sent, try again in a few seconds.',
+    "La commande précédente n'est pas encore visible : non envoyée, réessayez dans quelques secondes.",
   ),
   notRegistered: both(
     'The adapter does not know Gladys (not registered, or refused): the registration is tried again within the hour, or click "Register Gladys on the adapters". Not applied.',

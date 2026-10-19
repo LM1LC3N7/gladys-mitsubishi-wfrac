@@ -8,8 +8,9 @@
 // option values are published forever: never rename them.
 //
 // The air-conditioning features of the core, as MELCloud and the other
-// climate integrations: on/off (`air-conditioning/binary`, a "turn
-// everything off" may reach it: an air conditioner is acceptable there), mode,
+// climate integrations: on/off (`air-conditioning/binary`, not a switch; a
+// voice assistant or bridge that maps it may still reach it with a "turn
+// everything off": accepted for an air conditioner, as MELCloud), mode,
 // setpoint, fan speed, vertical vane; indoor and outdoor temperatures; the
 // error code of the unit as a text. Units are those the core lists
 // (DEVICE_FEATURE_UNITS_BY_CATEGORY): °C on `air-conditioning` and

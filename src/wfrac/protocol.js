@@ -4,11 +4,16 @@
 // checked against its own output (test/fixtures/golden.json).
 //
 // A frame is base64 of two blocks, each followed by a CRC16-CCITT
-// (little-endian; computed on what we send, the bridge checks it):
+// (little-endian):
 //   COMMAND block: 18-byte state, segment count, 4-byte segments, CRC
 //   RECEIVE block: 18-byte state, segment count, 4-byte segments, CRC
 // The RECEIVE block is what the unit is; its segments carry the indoor and
-// outdoor temperatures. A command is a full state block: every field travels
+// outdoor temperatures. In the frames the adapters send, the receive CRC
+// covers the window shifted two bytes back ([start - 2, end - 2): the command
+// CRC, then the receive block without its last two bytes), on every live
+// capture we have; in the frames the app (and this integration) sends, it
+// covers the receive block itself. A frame is "verified" when either matches:
+// a command is only ever decided on a verified frame. A command is a full state block: every field travels
 // with its set-bit, so a frame built on an old state would revert what
 // changed since (the app reads the state again right before each command).
 //
@@ -193,7 +198,8 @@ export const modelRange = (modelNrRaw) => setpointRange(undefined, modelNrRaw);
 /**
  * Decode an `airconStat` (base64) into the state of the unit. Throws a
  * PROTOCOL WfracError for anything that is not a well-formed frame (length,
- * base64, segment counts within the frame).
+ * base64, segment counts within the frame). `verified`: the receive CRC
+ * matches (see the header); a frame that is not is read, never acted on.
  */
 export function decodeStat(input) {
   if (typeof input !== 'string' || input.length < 8 || input.length > LIMITS.frameChars) {
@@ -215,21 +221,27 @@ export function decodeStat(input) {
   if (count > LIMITS.segments || data.length < end + 2) {
     throw protocolError('airconStat segments out of bounds');
   }
-  // The CRC of the receive block is not checked: the adapters' own does not
-  // match a CRC16 of the block as the app computes it (pywfrac does not check
-  // it either); the bounds above and the strict field decoding stand instead.
   const block = data.slice(start, end);
+  const stored = data[end] | (data[end + 1] << 8);
   const state = decodeState(block.slice(0, 18));
+  // The adapters' window (see the header), or the app's.
+  state.verified = crc16(data.slice(start - 2, end - 2)) === stored || crc16(block) === stored;
   for (let i = 19; i + 3 < block.length; i += 4) {
     const [tag, sub, value] = [block[i], block[i + 1], block[i + 2]];
     if (tag === 0x80 && sub === 16) {
-      state.outdoorTemperature = OUTDOOR_TEMPERATURES[value];
+      state.outdoorTemperature = thermistor(OUTDOOR_TEMPERATURES, value);
     } else if (tag === 0x80 && sub === 32) {
-      state.indoorTemperature = INDOOR_TEMPERATURES[value];
+      state.indoorTemperature = thermistor(INDOOR_TEMPERATURES, value);
     }
   }
   return state;
 }
+
+/** A thermistor byte: the flat floor of the table (sensor absent or cut) is unknown. */
+const thermistor = (table, value) => (table[value] > table[0] ? table[value] : undefined);
+
+/** The setpoints a frame may carry (pywfrac's widest range, 10-33 °C); others are unknown. */
+export const SETPOINT_BOUNDS = [10, 33];
 
 /** The 18-byte state block of the receive half (pywfrac _parse_basic_settings). */
 export function decodeState(content) {
@@ -259,7 +271,10 @@ export function decodeState(content) {
           ? [0, 16, 32, 48].indexOf(udBits) + 1
           : undefined,
     windLR,
-    presetTemp: setpointByte < 128 ? setpointByte / 2 : undefined,
+    presetTemp:
+      setpointByte / 2 >= SETPOINT_BOUNDS[0] && setpointByte / 2 <= SETPOINT_BOUNDS[1]
+        ? setpointByte / 2
+        : undefined,
     entrust: (b(12) & 12) === 4,
     coolHotJudge: (b(8) & 8) === 0,
     modelNrRaw,

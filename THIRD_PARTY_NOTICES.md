@@ -69,8 +69,8 @@ SOFTWARE.
   trying one then the other.
 - From the Home Assistant integration (`config_flow.py`, `coordinator.py`,
   `climate.py`) and its module reference: the 60-second polling, one operator
-  id and one device id per installation, the four account slots that only the
-  manufacturer's app frees, the 60-second write lock of the last writer, the
+  id and one device id per installation, the four account slots that only
+  `deleteAccountInfo` or the manufacturer's app free, the 60-second write lock of the last writer, the
   mapping of the modes, fan steps and vanes to a climate entity.
 
 Changed: commands are off by default and refused unless allowed in the
@@ -81,7 +81,9 @@ state is read again right before each command and the frame built on that
 read only (a field that decodes to no known value is unknown and refuses the
 command, where pywfrac falls back to a default); the command is sent within
 3.5 s of the click or refused unsent, never retried (no wait for the write
-lock, no registration and retry inside a command); the receive block's CRC is
-not checked (the adapters' own does not match, pywfrac does not check it
-either); no horizontal vane, 3D auto, self-clean, Home Leave mode, external
+lock, no registration and retry inside a command); the receive CRC is checked
+(pywfrac does not check it): in the adapters' frames it covers the window two
+bytes before the receive block (`[start - 2, end - 2)`), in the app's the
+block itself, and no command is decided on a frame matching neither; a mode
+change brings the setpoint into the new mode's range; no horizontal vane, 3D auto, self-clean, Home Leave mode, external
 room temperature, operation data, energy or firmware check.

@@ -31,8 +31,11 @@ One device per adapter (one per indoor unit), with:
 
 The setpoint is held to the range of the unit for the mode read just before:
 16 to 30 °C in cooling, 18 to 30 °C otherwise; ZT models (2025) go from 10 °C
-in heating up to 33 °C in cooling and drying. A value out of range is refused,
-never sent.
+in heating up to 33 °C in cooling and drying. In fan only, the setpoint is the
+one of the next mode: the range is that of all modes (16 to 30 °C, 10 to
+33 °C on ZT). A value out of range is refused, never sent. A mode change
+brings the setpoint read into the range of the new mode and sends it with it
+(for example 10 °C in heating becomes 16 °C when switching to cooling).
 
 ## Setup
 
@@ -40,12 +43,16 @@ never sent.
    under a name made of its MAC address).
 2. In the configuration of the integration, enter the addresses, separated by
    commas (8 at most). The port is 51443; the integration finds on its own
-   whether the adapter speaks HTTP or HTTPS.
+   whether the adapter speaks HTTPS (tried first) or HTTP. The same adapter
+   typed twice (IP address and name) is read once.
 3. Save, then add the air conditioners from the **Discovery** tab.
 4. To control them from Gladys, turn on **Allow the commands**.
 
 Each adapter is read every 60 seconds (30 s to 10 min), one request at a
 time, one second apart at least: the adapter takes one connection at a time.
+After a failure, the adapter is read again after 30 s, 1, 2 then 5 min, never
+sooner than the interval; the **Test the connection** button keeps that delay
+and says when the next try comes.
 
 ## Commands and the registration on the adapter
 
@@ -55,14 +62,17 @@ takes one) and frees none on its own. Hence:
 
 - commands are **off by default**: without the option, nothing is registered
   on the adapter;
-- Gladys uses **one identifier** for the whole installation, kept in its
-  `/data` folder; if it cannot be kept there, Gladys does not register at all
-  (each restart would take another slot);
+- Gladys uses **one identifier** for the whole installation, written once in
+  a file of its own in `/data`; if it cannot be written, Gladys does not
+  register at all (each restart would take another slot). If that file
+  becomes unreadable, it is set aside, Gladys makes no other on its own and
+  the status says so: the **Register Gladys on the adapters** button makes a
+  new one when you ask (the old slot stays taken, see "Uninstalling");
 - it registers **once** per adapter; after a refusal it tries again at most
   once an hour, never in a loop;
-- when the four slots are taken it no longer tries on its own: the status
-  says so. Remove an app or a phone in Smart M-Air, then click **Register
-  Gladys on the adapters**.
+- when the four slots are taken (the adapter counts four accounts) it no
+  longer tries on its own: the status says so. Remove an app or a phone in
+  Smart M-Air, then click **Register Gladys on the adapters**.
 
 Each command:
 
@@ -76,19 +86,29 @@ Each command:
   sending, the message is "Command sent, without confirmation": check the
   state a few seconds later (Gladys reads the unit again after 5 and 20
   seconds);
-- is not sent when the air conditioner already is in the asked state.
+- is not sent when the air conditioner already is in the asked state;
+- is refused when the frame read cannot be verified (its CRC does not match),
+  or when the adapter gives no fresh state (result 0);
+- is refused, unsent, when the previous command on another setting of the
+  same air conditioner is not visible yet in the state read ("try again in a
+  few seconds"): the frame would undo that command. Gladys never fills the
+  state read in from its memory.
 
 One command at a time per air conditioner: a second one, while a first one
 is running, is refused.
 
-**60-second lock.** After each write, the adapter keeps writing to its author
-for one minute. A command sent less than a minute after the Smart M-Air app
-was used is refused ("try again in a minute"); Gladys neither waits nor tries
-again.
+**60-second lock.** Each successful write keeps writing to its author (the
+device that sent it) for one minute; reads are not affected. So a Gladys
+command sent less than a minute after a change made in the Smart M-Air app
+(or another Wi-Fi controller) is refused ("try again in a minute"); Gladys
+neither waits nor tries again. The other way round, the app is refused for
+the minute after each Gladys command. The infrared remote does not go through
+the adapter and is not affected.
 
 **On/off and "turn everything off".** As with MELCloud, on/off is an
-air-conditioning feature: a scene or a voice assistant that "turns everything
-off" may switch the air conditioner off.
+air-conditioning feature, not a switch. Depending on what exposes it (a voice
+assistant, HomeKit, Google Home, MCP…), a "turn everything off" may reach the
+air conditioner: check your scenes and assistants if you do not want that.
 
 Changing the mode does not switch on an air conditioner that is off: only the
 mode changes.
@@ -100,9 +120,21 @@ mode changes.
 - On some units (old bus signature), the adapter does not report the
   horizontal vane position nor 3D auto: like the app and pywfrac, each command
   then sets them back to automatic / off.
+- A value that cannot be read (a setpoint outside 10 to 33 °C, a temperature
+  sensor absent or cut) is left unknown, never published.
 - When the adapter is slow to answer (more than 2 to 3 seconds), commands are
   refused without being sent. Try again; tell us if it happens often.
 - One Gladys installation per adapter is expected.
+
+## Uninstalling
+
+The slot Gladys takes on each adapter stays taken after uninstalling: this
+version has no button to free it yet. Before uninstalling (or to free the old
+slot after an unreadable identifier file), remove the matching entry in the
+Smart M-Air app if it shows it (not checked: a client registered locally may
+not appear there). Otherwise a reset of the adapter (see its manual) should
+empty its account table (not checked); the phones then have to be paired
+again.
 
 ## Security
 
@@ -112,12 +144,16 @@ and, once registered, control the air conditioner. Keep the adapters on a
 
 Depending on its firmware, the adapter speaks HTTP or HTTPS. Over HTTPS its
 certificate is self-signed and its TLS stack very old: the integration does
-not check the certificate and accepts the old TLS versions, as pywfrac does.
-This does not protect against a device impersonating the adapter on your
-network.
+not check the certificate and accepts TLS 1.0 and later, OpenSSL security
+level 0 and legacy renegotiation. This does not protect against a device
+impersonating the adapter on your network. Over **HTTP** (the oldest
+firmware), everything travels in plain text on the network, the identifier of
+Gladys included.
 
 The identifier of Gladys (operator and device) is kept in `/data`, never
-written to the logs, and sent to the adapters only.
+written to the logs, and sent only to adapters already identified: the first
+request to an address (which recognizes the adapter) carries a placeholder
+identifier.
 
 ## Credits
 

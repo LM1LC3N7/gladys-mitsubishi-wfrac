@@ -74,6 +74,50 @@ for (const [name, frame] of frames) {
   });
 }
 
+test('the receive CRC: the adapters (shifted window) and ours (plain) verified, a flipped bit not', () => {
+  for (const [name, frame] of frames) {
+    assert.equal(decodeStat(frame.payload).verified, true, name);
+    for (const command of Object.values(frame.commands)) {
+      assert.equal(decodeStat(command).verified, true, `${name} command`);
+    }
+  }
+  const d = [...Buffer.from(golden.frames.on_cool.payload, 'base64')];
+  const start = d[18] * 4 + 21;
+  for (const [offset, bit] of [
+    [4, 0x10],
+    [2, 0x01],
+    [3, 0x04],
+  ]) {
+    const copy = [...d];
+    copy[start + offset] ^= bit;
+    assert.equal(decodeStat(Buffer.from(copy).toString('base64')).verified, false, `${offset}`);
+  }
+});
+
+test('setpoints decoded within 10-33 °C only; thermistor floors unknown', () => {
+  const d = [...Buffer.from(golden.frames.on_cool.payload, 'base64')];
+  const start = d[18] * 4 + 21;
+  const withByte = (offset, value) => {
+    const copy = [...d];
+    copy[offset] = value;
+    return decodeStat(Buffer.from(copy).toString('base64'));
+  };
+  assert.equal(withByte(start + 4, 127).presetTemp, undefined);
+  assert.equal(withByte(start + 4, 19).presetTemp, undefined);
+  assert.equal(withByte(start + 4, 20).presetTemp, 10);
+  assert.equal(withByte(start + 4, 66).presetTemp, 33);
+  assert.equal(withByte(start + 4, 67).presetTemp, undefined);
+  // Segments: tag 0x80, sub 32 (indoor) at start + 19, sub 16 (outdoor) at start + 23.
+  assert.equal(d[start + 19], 0x80);
+  assert.equal(d[start + 20], 32);
+  assert.equal(withByte(start + 21, 15).indoorTemperature, undefined);
+  assert.equal(withByte(start + 21, 16).indoorTemperature, -29);
+  assert.equal(d[start + 24], 16);
+  assert.equal(withByte(start + 25, 0).outdoorTemperature, undefined);
+  assert.equal(withByte(start + 25, 4).outdoorTemperature, undefined);
+  assert.equal(withByte(start + 25, 5).outdoorTemperature, -48.9);
+});
+
 test('a command frame decodes back to the state it carries', () => {
   const state = decodeStat(golden.frames.on_cool.payload);
   const frame = encodeCommand(state, { presetTemp: 24.5, airFlow: 2 });
