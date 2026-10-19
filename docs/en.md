@@ -118,7 +118,7 @@ mode changes.
 - No horizontal vane, 3D auto, self-clean, Home Leave mode, external room
   temperature, operation data nor energy in this version.
 - On some units (old bus signature), the adapter does not report the
-  horizontal vane position nor 3D auto: like the app and pywfrac, each command
+  horizontal vane position nor 3D auto: like pywfrac, each command
   then sets them back to automatic / off.
 - A value that cannot be read (a setpoint outside 10 to 33 °C, a temperature
   sensor absent or cut) is left unknown, never published.

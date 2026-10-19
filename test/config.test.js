@@ -67,8 +67,20 @@ test('the persisted state: validated, bounded, no inherited key', () => {
   const memory = normalizeMemory(raw, now);
   assert.deepEqual([...memory.adapters.keys()], ['348e89c5a137']);
   assert.equal(memory.adapters.get('348e89c5a137').registered, true);
-  // A pause too far in the future is capped to the longest one, never dropped.
-  assert.equal(memory.addresses.get('192.168.1.70').pausedUntil, now + 6 * HOUR);
+  // A pause without its start time is not one this integration set: dropped.
+  assert.equal(memory.addresses.get('192.168.1.70').pausedUntil, 0);
+  assert.equal(memory.repaired, true);
+  // With its start, capped to 6 h from that start: restarts never move it.
+  const paused = (at, until, when) =>
+    normalizeMemory(
+      { addresses: { '10.0.0.9': { pausedAt: at, pausedUntil: until } } },
+      when,
+    ).addresses.get('10.0.0.9').pausedUntil;
+  assert.equal(paused(now, now + 100 * HOUR, now), now + 6 * HOUR);
+  assert.equal(paused(now, now + 100 * HOUR, now + 5 * HOUR), now + 6 * HOUR);
+  assert.equal(paused(now, now + 100 * HOUR, now + 7 * HOUR), 0);
+  assert.equal(paused(now + HOUR, now + 2 * HOUR, now), 0, 'a start in the future');
+  assert.equal(paused(now - HOUR, now + HOUR, now), now + HOUR);
   assert.equal(memory.addresses.get('10.0.0.1').scheme, undefined);
   const again = normalizeMemory(JSON.parse(JSON.stringify(serializeMemory(memory))), now);
   assert.deepEqual([...again.adapters.keys()], ['348e89c5a137']);
@@ -95,6 +107,13 @@ test('the ids file: ENOENT only is a first start; anything else is set aside, no
   assert.equal((await store.loadIds()).status, 'corrupt');
   assert.equal(existsSync(`${idsPath}.corrupt`), true);
   assert.equal(existsSync(idsPath), false);
+  assert.equal((await store.loadIds()).status, 'corrupt');
+  // A set-aside file that holds valid ids (a passing read error) is restored.
+  writeFileSync(`${idsPath}.corrupt`, JSON.stringify(ids));
+  assert.deepEqual(await store.loadIds(), { status: 'ok', ids });
+  assert.equal(existsSync(idsPath), true);
+  assert.equal(existsSync(`${idsPath}.corrupt`), false);
+  writeFileSync(idsPath, 'garbage');
   assert.equal((await store.loadIds()).status, 'corrupt');
   // Unreadable (a directory where the file should be): not a first start either.
   mkdirSync(join(dir, 'odd'));

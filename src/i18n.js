@@ -102,6 +102,11 @@ export const T = {
     'The identifier file of Gladys in /data is unreadable: it was set aside (.corrupt) and Gladys no longer registers on the adapters, so as not to take another of their four slots. To start again with a new identifier, allow the commands and click "Register Gladys on the adapters" (remove the old one in Smart M-Air if you can).',
     "Le fichier d'identifiant de Gladys dans /data est illisible : il a été mis de côté (.corrupt) et Gladys ne s'enregistre plus sur les adaptateurs, pour ne pas prendre une autre de leurs quatre places. Pour repartir avec un nouvel identifiant, autorisez les commandes et cliquez sur « Enregistrer Gladys sur les adaptateurs » (retirez l'ancien dans Smart M-Air si vous le pouvez).",
   ),
+  unverified: (names) =>
+    both(
+      `Frames whose CRC does not match (shown, no command): ${names}.`,
+      `Trames dont le CRC ne correspond pas (affichées, aucune commande) : ${names}.`,
+    ),
   duplicate: (pairs) =>
     both(
       `Same adapter typed twice, read once: ${pairs}.`,

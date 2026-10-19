@@ -147,14 +147,22 @@ export class WfracApp {
   }
 
   start(raw = {}) {
+    this.disableAtOnce(raw);
     return this.serialized(() => this.doStart(raw));
   }
 
   async doStart(raw) {
     this.stop();
+    // The new configuration holds at once (commands turned off included),
+    // before waiting for the reads in flight.
+    this.config = this.configOf(raw);
     await Promise.all([...this.units.values()].map((u) => u.running));
-    this.config = normalizeConfig(raw);
-    this.memory = normalizeMemory(await this.store.load().catch(() => null), this.now());
+    const loaded = await this.store.load().catch(() => null);
+    this.memory = normalizeMemory(loaded, this.now());
+    if (this.memory.repaired) {
+      // A pause or an attempt time was bounded: saved once, so it does not move.
+      await this.saveMemory();
+    }
     if (!this.idsLoaded) {
       await this.loadIds();
     }
@@ -246,7 +254,29 @@ export class WfracApp {
    * list, badges) and the last states. The pauses and registrations stay.
    */
   connected(raw = {}) {
+    this.disableAtOnce(raw);
     return this.serialized(() => this.doConnected(raw));
+  }
+
+  /**
+   * Commands turned off apply at once, before the queue (a command must never
+   * leave after the user turned them off); turning them on waits its turn.
+   */
+  disableAtOnce(raw) {
+    this.latestAllow = normalizeConfig(raw).allowCommands;
+    if (!this.latestAllow && this.config.allowCommands) {
+      this.config = { ...this.config, allowCommands: false };
+      this.logger.info('WF-RAC commands disabled');
+    }
+  }
+
+  /**
+   * A configuration taken from the queue: an older one queued before a later
+   * "commands off" never turns them back on.
+   */
+  configOf(raw) {
+    const config = normalizeConfig(raw);
+    return this.latestAllow === false ? { ...config, allowCommands: false } : config;
   }
 
   async doConnected(raw) {
@@ -259,7 +289,7 @@ export class WfracApp {
       await this.doStart(raw);
       return;
     }
-    this.config = normalizeConfig(raw);
+    this.config = this.configOf(raw);
     this.published = undefined;
     this.badge = undefined;
     this.lastStatus = undefined;
@@ -277,6 +307,7 @@ export class WfracApp {
 
   /** New addresses or interval restart; the option and the language apply at once. */
   configUpdated(raw = {}) {
+    this.disableAtOnce(raw);
     return this.serialized(() => this.doConfigUpdated(raw));
   }
 
@@ -286,7 +317,7 @@ export class WfracApp {
       return;
     }
     const previous = this.config;
-    this.config = normalizeConfig(raw);
+    this.config = this.configOf(raw);
     if (this.config.allowCommands !== previous.allowCommands) {
       this.logger.info(`WF-RAC commands ${this.config.allowCommands ? 'allowed' : 'disabled'}`);
       if (this.config.allowCommands) {
@@ -353,7 +384,7 @@ export class WfracApp {
   addressMemory(unit) {
     let entry = this.memory.addresses.get(unit.key);
     if (!entry) {
-      entry = { scheme: undefined, pausedUntil: 0 };
+      entry = { scheme: undefined, pausedUntil: 0, pausedAt: 0 };
       this.memory.addresses.set(unit.key, entry);
     }
     return entry;
@@ -465,11 +496,13 @@ export class WfracApp {
       // carries placeholder ids anyway, see client.js).
       const known = memory.scheme ?? unit.scheme;
       const schemes = known ? [known, known === 'http' ? 'https' : 'http'] : ['https', 'http'];
-      // One discovery at a time across the adapters: the same adapter typed
-      // under two addresses is found before both read it.
-      const { scheme, airconId } = await this.discoveryGate.run(() =>
-        this.client.discover(unit.address, schemes),
-      );
+      // One first discovery at a time across the adapters: the same adapter
+      // typed under two addresses is found before both read it. An address
+      // already identified checks itself again on its own.
+      const discover = () => this.client.discover(unit.address, schemes);
+      const { scheme, airconId } = unit.airconId
+        ? await discover()
+        : await this.discoveryGate.run(discover);
       if (generation !== this.generation || !this.current(unit)) {
         return;
       }
@@ -549,6 +582,8 @@ export class WfracApp {
     );
     const memory = this.addressMemory(unit);
     memory.pausedUntil = Math.max(memory.pausedUntil, this.now() + wait);
+    // The start of the pause: what it is capped on when read back.
+    memory.pausedAt = this.now();
     this.saveMemory().catch(() => {});
   }
 
@@ -816,6 +851,10 @@ export class WfracApp {
     if (down.length > 0) {
       notes.unshift(T.unreachable(down.map((u) => this.nameOf(u)).join(', ')));
     }
+    const unverified = up.filter((u) => u.unverified);
+    if (unverified.length > 0) {
+      notes.push(T.unverified(unverified.map((u) => this.nameOf(u)).join(', ')));
+    }
     const duplicates = units.filter((u) => u.duplicateOf);
     if (duplicates.length > 0) {
       notes.push(T.duplicate(duplicates.map((u) => `${u.key} = ${u.duplicateOf}`).join(', ')));
@@ -1035,7 +1074,8 @@ export class WfracApp {
         !Object.hasOwn(change, field) &&
         this.guardActive(key) &&
         !guard.moved &&
-        state[field] === guard.from
+        state[field] === guard.from &&
+        state[field] !== guard.expected
       ) {
         throw this.refusal(ERRORS.previousPending);
       }
@@ -1255,7 +1295,9 @@ export class WfracApp {
       if (value !== guard.from) {
         guard.moved = true;
       }
-      if (guard.moved && value === guard.expected) {
+      // A command that asked for the value already shown (resent under a
+      // guard) can show no move: the wanted value seen lifts it.
+      if (value === guard.expected && (guard.moved || guard.from === guard.expected)) {
         this.guards.delete(key);
       }
     }

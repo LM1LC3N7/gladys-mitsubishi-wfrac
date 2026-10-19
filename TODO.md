@@ -168,6 +168,19 @@ up to date at the end of every milestone.
   Reads 5 s and 20 s after every command. One command at a time per adapter.
   The ack never waits for Gladys (publications in the background) nor for
   /data (pause and registration saved in the background; review M15).
+- **Approval round 1 (2026-10-19)**: "commands off" applies at once on
+  reception (`configUpdated`, `connected`, `start`), before the queue; a
+  configuration queued earlier never turns them back on (`configOf`); only
+  turning them on waits its turn; `doStart` sets the configuration before
+  waiting for the reads in flight (R1, P2/P2b). A guard whose start already
+  equals its wanted value is lifted by a read showing it, and never blocks
+  another field when the value read is the wanted one (R2, P1). A 429 pause
+  keeps its start (`pausedAt`): capped to 6 h from that start, saved once
+  when capped or when an attempt time was in the future; a pause without a
+  valid start is dropped (P3). A set-aside ids file is read again and
+  restored when it holds valid ids. The status names frames whose CRC does
+  not match. Only first discoveries are serialized. Docs: "like pywfrac" for
+  the horizontal vane.
 - **Review round 1 (2026-10-19)**: the fresh read of a command needs result 0
   and the adapter's airconId (M4) and a verified CRC (I4). A command is
   refused, unsent, when another field of the same unit has an active guard

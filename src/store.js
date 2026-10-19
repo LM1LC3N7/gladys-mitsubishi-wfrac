@@ -12,8 +12,11 @@
 //     (by airconId) whether our operator id is registered, the table was found
 //     full, the time of the last registration attempt (one per hour at most,
 //     persisted before the request: never in a loop); per address the scheme
-//     that answered (http or https) and the end of a 429 pause, capped when
-//     read back (6 h at most).
+//     that answered (http or https) and the start and end of a 429 pause
+//     (6 h at most from its start, capped on that fixed start when read
+//     back, and saved once when capped: restarts never move it).
+// A set-aside ids file is read again at each start and restored when it
+// holds valid ids (a passing read error).
 // The ids are not secrets the user typed, but they let a client write to the
 // adapters: never logged.
 // -----------------------------------------------------------------------------
@@ -85,13 +88,27 @@ export function fileStore(path = STATE_FILE, idsPath = IDS_FILE) {
         text = await readFile(idsPath, 'utf8');
       } catch (err) {
         if (err.code === 'ENOENT') {
-          // A file set aside earlier: still no new ids on their own.
+          // A file set aside earlier: read again (a passing read error), and
+          // restored when it holds valid ids; else still no new ids.
+          let aside;
           try {
-            await readFile(`${idsPath}.corrupt`);
-            return { status: 'corrupt', reason: 'set aside earlier' };
-          } catch {
-            return { status: 'missing' };
+            aside = await readFile(`${idsPath}.corrupt`, 'utf8');
+          } catch (asideErr) {
+            return asideErr.code === 'ENOENT'
+              ? { status: 'missing' }
+              : { status: 'corrupt', reason: asideErr.code ?? 'unreadable' };
           }
+          let restored;
+          try {
+            restored = normalizeIds(JSON.parse(aside));
+          } catch {
+            restored = null;
+          }
+          if (restored) {
+            await rename(`${idsPath}.corrupt`, idsPath).catch(() => {});
+            return { status: 'ok', ids: restored };
+          }
+          return { status: 'corrupt', reason: 'set aside earlier' };
         }
         await rename(idsPath, `${idsPath}.corrupt`).catch(() => {});
         return { status: 'corrupt', reason: err.code ?? 'unreadable' };
@@ -165,6 +182,8 @@ export const newIds = () => ({
  * shape are kept (never an inherited or `__proto__` key).
  */
 export function normalizeMemory(raw, now) {
+  /** Whether a value was bounded: the caller saves once, so it never moves again. */
+  let repaired = false;
   const adapters = new Map();
   const rawAdapters = own(raw, 'adapters');
   if (isObject(rawAdapters)) {
@@ -173,11 +192,15 @@ export function normalizeMemory(raw, now) {
       if (!AIRCON_ID.test(key) || !isObject(entry)) {
         continue;
       }
+      const attemptAt = time(own(entry, 'attemptAt'));
+      if (attemptAt > now) {
+        repaired = true;
+      }
       adapters.set(key, {
         registered: own(entry, 'registered') === true,
         full: own(entry, 'full') === true,
         // An attempt "in the future" (a clock set back) counts as now.
-        attemptAt: Math.min(time(own(entry, 'attemptAt')), now),
+        attemptAt: Math.min(attemptAt, now),
       });
     }
   }
@@ -191,14 +214,27 @@ export function normalizeMemory(raw, now) {
       }
       const scheme = own(entry, 'scheme');
       const until = time(own(entry, 'pausedUntil'));
+      const at = time(own(entry, 'pausedAt'));
+      // A pause lasts 6 h at most from the time it was set: capped on that
+      // fixed time, so restarts never move it. Without a valid start (or one
+      // "in the future"), it is not one this integration set: dropped.
+      let pausedUntil = 0;
+      let pausedAt = 0;
+      if (until > now && at > 0 && at <= now) {
+        pausedAt = at;
+        pausedUntil = Math.min(until, at + TIMINGS.rateLimitMax);
+      }
+      if (until > 0 && pausedUntil !== until && until > now) {
+        repaired = true;
+      }
       addresses.set(key, {
         scheme: SCHEMES.includes(scheme) ? scheme : undefined,
-        // A pause further than the longest one is capped, never dropped.
-        pausedUntil: until > now ? Math.min(until, now + TIMINGS.rateLimitMax) : 0,
+        pausedUntil: pausedUntil > now ? pausedUntil : 0,
+        pausedAt: pausedUntil > now ? pausedAt : 0,
       });
     }
   }
-  return { adapters, addresses };
+  return { adapters, addresses, repaired };
 }
 
 /** The persisted form (plain objects of validated keys only). */
@@ -211,9 +247,12 @@ export function serializeMemory(memory) {
       ]),
     ),
     addresses: Object.fromEntries(
-      [...memory.addresses].map(([key, { scheme, pausedUntil }]) => [
+      [...memory.addresses].map(([key, { scheme, pausedUntil, pausedAt }]) => [
         key,
-        { ...(scheme ? { scheme } : {}), ...(pausedUntil ? { pausedUntil } : {}) },
+        {
+          ...(scheme ? { scheme } : {}),
+          ...(pausedUntil ? { pausedUntil, pausedAt } : {}),
+        },
       ]),
     ),
   };

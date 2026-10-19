@@ -7,9 +7,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
 import { WfracApp } from '../src/app.js';
-import { ACTIONS, MINUTE, SECOND } from '../src/constants.js';
+import { ACTIONS, HOUR, MINUTE, SECOND } from '../src/constants.js';
 import { registerHandlers } from '../src/handlers.js';
-import { memoryStore, newIds } from '../src/store.js';
+import { memoryStore, newIds, normalizeMemory } from '../src/store.js';
 import { decodeStat } from '../src/wfrac/protocol.js';
 import {
   AIRCON_ID,
@@ -369,4 +369,117 @@ test('ids written once: a second start reads them, never writes new ones', async
   await advance(5 * SECOND, 500);
   assert.equal(written, 0);
   assert.deepEqual(store.ids, ids);
+});
+
+// --- Approval round 1 ----------------------------------------------------------
+
+test('R2 (P1) a resend of the value already shown does not block the other commands', async (t) => {
+  const server = fakeAdapters();
+  const unit = server.adapters[HOST];
+  const { sendNow, advance } = await setup(t, { config: ALLOWED, server });
+  unit.delays.setAirconStat = 10 * SECOND;
+  assert.match((await sendNow('target-temperature', 24)).error, /sans confirmation/);
+  delete unit.delays.setAirconStat;
+  await advance(25 * SECOND, SECOND);
+  const back = await sendNow('target-temperature', 26);
+  assert.equal(back.success, true, back.error);
+  await advance(10 * SECOND, SECOND);
+  const fan = await sendNow('fan-speed', 5);
+  assert.equal(fan.success, true, fan.error);
+  assert.equal(lastFrame(server).airFlow, 4);
+});
+
+async function slowRead(t, configs) {
+  const server = fakeAdapters({ [HOST]: adapter(), [HOST2]: adapter({ airconId: AIRCON_ID2 }) });
+  const both = `${HOST}, ${HOST2}`;
+  const { gladys, app, advance } = await setup(t, {
+    server,
+    config: { addresses: both, allow_commands: true },
+  });
+  server.adapters[HOST].delays.getAirconStat = 20 * SECOND;
+  for (let i = 0; i < 120 && !app.units.get(HOST).running; i += 1) {
+    await advance(SECOND, SECOND);
+  }
+  assert.ok(app.units.get(HOST).running, 'a read in flight');
+  const saves = [];
+  for (const allow of configs) {
+    saves.push(
+      gladys.fake.configUpdated({ addresses: both, allow_commands: allow, poll_interval: 120 }),
+    );
+    await settle();
+  }
+  await advance(2 * SECOND, 500);
+  const d = gladys.fake.devices.find((x) => x.external_id === device(AIRCON_ID2));
+  const ack = gladys.fake.setValue(
+    d,
+    d.features.find((f) => f.external_id === feature('binary', AIRCON_ID2)),
+    0,
+  );
+  await settle();
+  await advance(6 * SECOND, 100);
+  const answer = await ack;
+  await advance(20 * SECOND, SECOND);
+  await Promise.all(saves);
+  return { server, app, answer };
+}
+
+test('R1 (P2) commands turned off with a restart, a slow read elsewhere: refused at once', async (t) => {
+  const { server, app, answer } = await slowRead(t, [false]);
+  assert.equal(answer.success, false);
+  assert.match(answer.error, /Autoriser les commandes/);
+  assert.equal(sets(server).length, 0);
+  assert.equal(app.config.allowCommands, false);
+});
+
+test('R1 (P2b) "commands off" behind a queued restart: an older save never turns them on', async (t) => {
+  const { server, app, answer } = await slowRead(t, [true, false]);
+  assert.equal(answer.success, false);
+  assert.equal(sets(server).length, 0);
+  assert.equal(app.config.allowCommands, false);
+});
+
+test('R1 commands turned on again later: they work', async (t) => {
+  const { server, app, advance } = await setup(t, { config: ALLOWED });
+  await app.configUpdated(CONFIG);
+  assert.equal(app.config.allowCommands, false);
+  const on = app.configUpdated(ALLOWED);
+  await advance(2 * SECOND, 500);
+  await on;
+  assert.equal(app.config.allowCommands, true);
+  void server;
+});
+
+test('P3 a pause read back is capped on its own start, saved once: restarts never move it', async (t) => {
+  const store = memoryStore({
+    adapters: {},
+    addresses: { [HOST]: { scheme: 'https', pausedAt: NOW, pausedUntil: NOW + 30 * 24 * HOUR } },
+  });
+  const { app } = await setup(t, { store });
+  assert.equal(app.pausedUntil(app.units.get(HOST)), NOW + 6 * HOUR);
+  assert.equal(store.data.addresses[HOST].pausedUntil, NOW + 6 * HOUR);
+  const at = (h) => normalizeMemory(store.data, NOW + h * HOUR).addresses.get(HOST).pausedUntil;
+  assert.equal(at(5), NOW + 6 * HOUR);
+  assert.equal(at(10), 0);
+  const legacy = { addresses: { [HOST]: { pausedUntil: NOW + 30 * 24 * HOUR } } };
+  assert.ok(
+    normalizeMemory(legacy, NOW + 10 * HOUR).addresses.get(HOST).pausedUntil <= NOW + 6 * HOUR,
+  );
+});
+
+test('a frame whose CRC does not match is named in the status', async (t) => {
+  const server = fakeAdapters();
+  const inner = server.transport;
+  server.transport = async (options) => {
+    const answer = await inner(options);
+    if (options.path.endsWith('getAirconStat')) {
+      const body = JSON.parse(answer.body);
+      const d = [...Buffer.from(body.contents.airconStat, 'base64')];
+      d[d[18] * 4 + 21 + 4] ^= 0x02;
+      body.contents.airconStat = Buffer.from(d).toString('base64');
+      return { ...answer, body: JSON.stringify(body) };
+    }
+    return answer;
+  };
+  const { gladys } = await setup(t, { server });
+  assert.match(message(gladys).fr, /CRC ne correspond pas.*192\.168\.1\.70/);
 });

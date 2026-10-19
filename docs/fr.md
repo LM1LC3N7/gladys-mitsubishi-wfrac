@@ -127,8 +127,7 @@ Changer de mode ne rallume pas un climatiseur éteint : seul le mode change.
   fonctionnement ni d'énergie dans cette version.
 - Sur certains appareils (signature de bus ancienne), l'adaptateur ne
   remonte pas la position du volet horizontal ni le 3D auto : comme
-  l'application et pywfrac, chaque commande les renvoie alors en
-  automatique / désactivé.
+  pywfrac, chaque commande les renvoie alors en automatique / désactivé.
 - Une valeur qui ne peut pas être lue (consigne hors de 10 à 33 °C, capteur de
   température absent ou coupé) est laissée inconnue, jamais publiée.
 - Si l'adaptateur répond lentement (plus de 2 à 3 secondes), les commandes
