@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-23
+
 ## [0.1.1] - 2026-10-19
 
 ### Added
@@ -51,5 +53,6 @@ the notes of the version's GitHub Release.
   uninstalling, cover, `THIRD_PARTY_NOTICES.md` (pywfrac and the Home
   Assistant integration, MIT), shipped in the image with `LICENSE`.
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-mitsubishi-wfrac/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/LM1LC3N7/gladys-mitsubishi-wfrac/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/LM1LC3N7/gladys-mitsubishi-wfrac/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LM1LC3N7/gladys-mitsubishi-wfrac/releases/tag/v0.1.1

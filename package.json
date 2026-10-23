@@ -1,6 +1,6 @@
 {
   "name": "gladys-mitsubishi-wfrac",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Gladys Assistant external integration for Mitsubishi Heavy Industries air conditioners with the WF-RAC Wi-Fi adapter: on/off, mode, setpoint, fan, vane, indoor and outdoor temperatures, over the local API of the adapter. Unofficial, not affiliated with Mitsubishi Heavy Industries.",
   "type": "module",

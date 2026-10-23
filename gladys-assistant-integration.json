@@ -6,8 +6,8 @@
     "en": "Mitsubishi Heavy Industries air conditioners with the WF-RAC Wi-Fi adapter, over the local API.",
     "fr": "Climatiseurs Mitsubishi Heavy Industries avec l'adaptateur Wi-Fi WF-RAC, par l'API locale."
   },
-  "version": "0.1.1",
-  "docker_image": "ghcr.io/lm1lc3n7/gladys-mitsubishi-wfrac:0.1.1",
+  "version": "0.1.2",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-mitsubishi-wfrac:0.1.2",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-mitsubishi-wfrac/main/cover.png",
   "categories": ["climate"],
